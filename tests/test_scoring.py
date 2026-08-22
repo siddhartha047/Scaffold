@@ -16,7 +16,7 @@ import scaffold
 from scaffold.backbone import build_backbone
 from scaffold.scoring import ScoreParams, path_scores, tree_scores
 
-BACKBONES = ["fast-maxst", "maxst", "mst", "randst", "spt"]
+BACKBONES = ["fast-maxst", "maxst", "mst", "fast-randst", "randst", "spt"]
 PARAM_SETS = [
     ScoreParams(),
     ScoreParams(alpha=1.0, beta_edge=0.0, beta_node=0.0),

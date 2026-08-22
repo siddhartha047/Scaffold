@@ -16,13 +16,14 @@ Available backbones
                 comparison sort. On an unweighted graph it degenerates to the
                 fastest deterministic forest scan available.
 ``fast-mst``    Same, minimizing.
+``fast-randst`` Seeded coprime-stride randomized Kruskal. Visits every edge
+                exactly once without allocating a random permutation. Faster
+                and lower-memory than ``randst``, with less random mixing.
 ``maxst``       Exact maximum spanning forest (stable Kruskal, ``O(m log m)``).
 ``mst``         Exact minimum spanning forest.
-``randst``      Kruskal on a uniform random edge permutation. Structurally
-                similar to a uniform random spanning tree but orders of
-                magnitude cheaper than Wilson's algorithm. Re-drawn per call,
-                which is what makes per-epoch resparsification produce
-                genuinely different views.
+``randst``      Kruskal on a uniform random edge permutation. Better-randomized
+                edge order than ``fast-randst``, at the cost of materializing
+                that full permutation. Re-drawn per call.
 ``spt``         Multi-source shortest-path (BFS) forest from the highest-degree
                 node of each component. Low diameter, useful when you care more
                 about hop distance than about edge weight.
@@ -38,12 +39,18 @@ directly as a boolean mask / edge-id array.
 
 from __future__ import annotations
 
+import math
 from typing import Callable, Dict, Optional
 
 import numpy as np
 
 from .graph import Graph
-from .kernels import build_csr, counting_order, spanning_forest_mask
+from .kernels import (
+    build_csr,
+    counting_order,
+    spanning_forest_mask,
+    strided_spanning_forest_mask,
+)
 
 __all__ = [
     "DEFAULT_BACKBONE",
@@ -67,8 +74,8 @@ _ALIASES = {
     "max_st": "maxst",
     "min_st": "mst",
     "rand_st": "randst",
-    "fast_randst": "randst",
-    "fast-randst": "randst",
+    "fast_randst": "fast-randst",
+    "fastrandst": "fast-randst",
     "random": "randst",
     "bfs": "spt",
     "shortest_path": "spt",
@@ -233,6 +240,41 @@ def _random_forest(graph: Graph, max_edges, seed) -> np.ndarray:
     )
 
 
+def _fast_random_forest(graph: Graph, max_edges, seed) -> np.ndarray:
+    """Seeded strided random forest without allocating a full permutation."""
+    limit = _limit(graph, max_edges)
+    m = graph.num_edges
+    if m == 0 or limit == 0:
+        return np.zeros(m, dtype=bool)
+    if m == 1:
+        return spanning_forest_mask(
+            graph.num_nodes,
+            graph.src,
+            graph.dst,
+            np.zeros(1, dtype=np.int64),
+            max_edges=limit,
+        )
+
+    rng = np.random.default_rng(seed)
+    offset = int(rng.integers(0, m))
+    stride = int(rng.integers(1, m))
+    if stride % 2 == 0:
+        stride += 1
+    while math.gcd(stride, m) != 1:
+        stride += 2
+        if stride >= m:
+            stride = 1
+            break
+    return strided_spanning_forest_mask(
+        graph.num_nodes,
+        graph.src,
+        graph.dst,
+        offset,
+        stride,
+        max_edges=limit,
+    )
+
+
 def _shortest_path_forest(graph: Graph, max_edges, seed) -> np.ndarray:
     """BFS forest rooted at the highest-degree node of each component."""
     limit = _limit(graph, max_edges)
@@ -389,6 +431,12 @@ register_backbone(
 register_backbone(
     "randst",
     lambda graph, max_edges=None, seed=None, **_: _random_forest(graph, max_edges, seed),
+)
+register_backbone(
+    "fast-randst",
+    lambda graph, max_edges=None, seed=None, **_: (
+        _fast_random_forest(graph, max_edges, seed)
+    ),
 )
 register_backbone(
     "spt",

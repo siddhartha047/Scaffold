@@ -45,18 +45,36 @@ Exact stable Kruskal, `O(m log m)`. Ties break on edge id, so runs are
 reproducible. Use these when the weight ordering genuinely matters and you can
 afford the sort.
 
-### `randst`
+### `fast-randst` and `randst`
 
-Kruskal on a uniform random edge permutation. Structurally similar to a uniform
-random spanning tree, orders of magnitude cheaper than Wilson's algorithm.
+Both are randomized Kruskal forests and are redrawn on every call:
 
-**Re-drawn on every call**, which is what makes per-epoch resparsification
-produce genuinely different views rather than the same graph with different
-decorations.
+- `fast-randst` draws only a seeded offset and coprime stride. The resulting
+  arithmetic traversal visits every edge once without allocating an `m`-entry
+  permutation. It is the faster, lower-memory choice and matches the research
+  tensor backend's fast randomized support.
+- `randst` constructs a full uniform random edge permutation before the same
+  union-find scan. Its edge order is more thoroughly randomized, but creating
+  and storing the permutation costs additional time and `O(m)` memory.
+
+Neither is an exact uniform spanning-tree sampler. The distinction is the
+randomness and cost of the *edge order*, not the union-find acceptance rule.
+
+Warmed median construction times with numba on the development machine were:
+
+| undirected edges | `fast-randst` | `randst` | speedup |
+|---:|---:|---:|---:|
+| 130,560 | 2.4 ms | 4.5 ms | 1.9× |
+| 523,264 | 9.9 ms | 22.6 ms | 2.3× |
+| 2,095,104 | 134.3 ms | 177.6 ms | 1.3× |
+
+The exact ratio is graph-, seed-, cache-, and machine-dependent. The stable
+distinction is that `fast-randst` generates two random integers and no order
+array, whereas `randst` generates and stores all `m` permutation entries.
 
 ```python
-a = scaffold.fast(G, keep_ratio=0.2, backbone="randst", seed=1)
-b = scaffold.fast(G, keep_ratio=0.2, backbone="randst", seed=2)
+a = scaffold.fast(G, keep_ratio=0.2, backbone="fast-randst", seed=1)
+b = scaffold.fast(G, keep_ratio=0.2, backbone="fast-randst", seed=2)
 # a.mask != b.mask
 ```
 
@@ -100,7 +118,9 @@ an ablation; almost never what you want in production.
 |---|---|
 | Large graph, want it fast | `fast-maxst` (default) |
 | Weight ordering matters exactly | `maxst` / `mst` |
-| Per-epoch resparsification | `randst`, or `scaffold.sample(backbone="rotate-randst")` |
+| Fast randomized support | `fast-randst` |
+| More thoroughly shuffled support | `randst` |
+| Per-epoch resparsification | `fast-randst`, or `scaffold.sample(backbone="rotate-randst")` |
 | Hop distance matters more than weight | `spt` |
 | Small graph, want the best skeleton | `glst` |
 | Ablation with no structural guarantee | `none` |
@@ -113,13 +133,15 @@ over non-tree edges of `dist_F(u,v)/w(e)`, so lower is a better starting point:
 | `fast-maxst` | 195 | 2535 |
 | `maxst` | 195 | 2535 |
 | `mst` | 195 | 2535 |
+| `fast-randst` | 195 | 1719 |
 | `randst` | 195 | 1649 |
 | `spt` | 195 | 2355 |
 | `glst` | 195 | 1961 |
 
 (On this unweighted grid the three weighted variants coincide, as noted above.
-`randst` wins on stretch here because a random maze has no long thin comb
-structure — a nice reminder that "deterministic" does not mean "better".)
+Both randomized variants improve stretch here because a random maze has no
+long thin comb structure; `randst` happens to win for seed 0. This is a quality
+sample, not a claim that one randomized distribution always dominates.)
 
 Reproduce with [`examples/04_backbones_and_tuning.py`](../examples/04_backbones_and_tuning.py).
 

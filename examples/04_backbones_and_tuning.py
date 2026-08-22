@@ -36,7 +36,9 @@ section("1. The available backbones")
 print(f"  {scaffold.available_backbones()}\n")
 print(f"  {'backbone':12s} {'forest':>7s} {'stretch':>10s} {'edges':>7s} {'comp':>5s}")
 print(f"  {'-' * 12} {'-' * 7} {'-' * 10} {'-' * 7} {'-' * 5}")
-for name in ("fast-maxst", "maxst", "mst", "randst", "spt", "glst"):
+for name in (
+    "fast-maxst", "maxst", "mst", "fast-randst", "randst", "spt", "glst"
+):
     mask = build_backbone(G, name, seed=0)
     # total_stretch: sum over non-tree edges of dist_T(u,v)/w(e). Lower is a
     # better starting point -- fewer long detours for the growth phase to fix.
@@ -49,6 +51,8 @@ for name in ("fast-maxst", "maxst", "mst", "randst", "spt", "glst"):
 print("\n  On an *unweighted* grid, fast-maxst and maxst coincide: with no weights")
 print("  to sort by, both fall back to the same deterministic scan. Give the grid")
 print("  weights and they diverge.")
+print("  fast-randst avoids constructing randst's full random permutation; it is")
+print("  normally faster, while randst provides a more thoroughly shuffled order.")
 
 
 # ----------------------------------------------------------------------

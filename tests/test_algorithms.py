@@ -17,7 +17,11 @@ import pytest
 
 import scaffold
 from conftest import ALL_METHODS, GREEDY_METHODS, sparsify_any
-from scaffold.backbone import build_backbone
+from scaffold.backbone import (
+    DEFAULT_BACKBONE,
+    build_backbone,
+    canonical_backbone_name,
+)
 
 
 # ----------------------------------------------------------------------
@@ -248,10 +252,50 @@ def test_random_backbone_responds_to_the_seed(grid):
     assert not np.array_equal(first.mask, second.mask)
 
 
+def test_fast_randst_is_registered_with_research_alias(grid):
+    assert DEFAULT_BACKBONE == "fast-maxst"
+    assert "fast-randst" in scaffold.available_backbones()
+    assert canonical_backbone_name("fast_randst") == "fast-randst"
+    by_hyphen = build_backbone(grid, "fast-randst", seed=3)
+    by_underscore = build_backbone(grid, "fast_randst", seed=3)
+    np.testing.assert_array_equal(by_hyphen, by_underscore)
+
+
+def test_fast_randst_is_a_seeded_spanning_forest(grid):
+    first = build_backbone(grid, "fast-randst", seed=1)
+    repeated = build_backbone(grid, "fast-randst", seed=1)
+    second = build_backbone(grid, "fast-randst", seed=2)
+
+    assert int(first.sum()) == grid.num_nodes - 1
+    np.testing.assert_array_equal(first, repeated)
+    assert not np.array_equal(first, second)
+
+
+def test_fast_randst_is_distinct_from_randst(grid):
+    fast_random = build_backbone(grid, "fast-randst", seed=7)
+    full_random = build_backbone(grid, "randst", seed=7)
+    assert not np.array_equal(fast_random, full_random)
+
+
+def test_fast_randst_honors_partial_forest_budget(grid):
+    mask = build_backbone(grid, "fast-randst", seed=7, max_edges=20)
+    assert int(mask.sum()) == 20
+
+
+@pytest.mark.parametrize("method", GREEDY_METHODS)
+def test_fast_randst_integrates_with_greedy_methods(grid, method):
+    result = scaffold.sparsify(
+        grid, method=method, keep_ratio=0.7, backbone="fast-randst", seed=7
+    )
+    assert result.num_components() == 1
+    assert result.metadata["backbone"] == "fast-randst"
+
+
 def test_global_numpy_rng_is_not_touched(grid):
     np.random.seed(1234)
     before = np.random.get_state()[1][:8].copy()
     scaffold.fast(grid, keep_ratio=0.7, backbone="randst", seed=7)
+    scaffold.fast(grid, keep_ratio=0.7, backbone="fast-randst", seed=7)
     scaffold.sample(grid, seed=7).draw(keep_ratio=0.7)
     np.testing.assert_array_equal(before, np.random.get_state()[1][:8])
 
