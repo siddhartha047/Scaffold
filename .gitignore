@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Environments
+.venv/
+venv/
+env/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+.ruff_cache/
+.mypy_cache/
+
+# Numba
+__pycache__/*.nbi
+__pycache__/*.nbc
+
+# SCAFFOLD artifacts (precomputed sample weights can be large)
+*.npz
+!tests/data/*.npz
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Local scratch
+scratch/
+tmp/
