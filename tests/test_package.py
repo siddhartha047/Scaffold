@@ -84,6 +84,20 @@ def test_readme_and_license_are_shipped():
     assert (ROOT / "CHANGELOG.md").is_file()
 
 
+def test_readme_figures_use_existing_repository_files():
+    """Private repositories cannot serve unauthenticated raw-GitHub images."""
+    text = (ROOT / "README.md").read_text()
+    targets = set(re.findall(r"!\[[^]]*\]\((docs/images/[^)]+\.png)\)", text))
+    expected = {
+        "docs/images/grid_methods.png",
+        "docs/images/grid_scores.png",
+        "docs/images/grid_coverage.png",
+        "docs/images/grid_backbones.png",
+    }
+    assert targets == expected
+    assert all((ROOT / target).is_file() for target in targets)
+
+
 def test_py_typed_marker_exists():
     assert (ROOT / "src" / "scaffold" / "py.typed").is_file()
 

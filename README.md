@@ -98,25 +98,25 @@ python examples/01_grid_demo.py --out docs/images
 backbone (free — it is what guarantees connectivity); bold blue is what each
 method chose to buy with the rest of the budget.
 
-![the four methods on a grid](https://raw.githubusercontent.com/siddhartha047/Scaffold/main/docs/images/grid_methods.png)
+![the four methods on a grid](docs/images/grid_methods.png)
 
 **`scaffold.sample` returns weights, not a subgraph.** Left: the
 ratio-independent weight `π` for every edge. Middle: inclusion probabilities at
 a 72% budget — yellow edges have `p = 1` and appear in *every* draw. Right: one
 draw.
 
-![sample weights on a grid](https://raw.githubusercontent.com/siddhartha047/Scaffold/main/docs/images/grid_scores.png)
+![sample weights on a grid](docs/images/grid_scores.png)
 
 **Why that matters for training.** Any single sparsifier shows the model 72% of
 the graph and permanently discards the rest. Redrawing each epoch shows it
 nearly all of the graph, while every individual view stays small.
 
-![coverage over training](https://raw.githubusercontent.com/siddhartha047/Scaffold/main/docs/images/grid_coverage.png)
+![coverage over training](docs/images/grid_coverage.png)
 
 **Support backbones.** Every run starts from a spanning forest; which one
 changes the character of the result.
 
-![backbones](https://raw.githubusercontent.com/siddhartha047/Scaffold/main/docs/images/grid_backbones.png)
+![backbones](docs/images/grid_backbones.png)
 
 ---
 

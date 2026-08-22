@@ -61,7 +61,7 @@ First release. Private install from the GitHub repository; see
 - Demo graphs (`grid_graph`, `ring_of_cliques`, `random_geometric`) and
   plotting helpers in `scaffold.viz`.
 - Four runnable examples and a visual grid-graph walkthrough.
-- 247 tests, including exact equivalence between the tree-prefix kernel and the
+- 248 tests, including exact equivalence between the tree-prefix kernel and the
   shortest-path reference across five backbones and four parameter sets.
 
 ### Notes
