@@ -1,0 +1,110 @@
+[build-system]
+# setuptools rather than hatchling: it ships with essentially every Python
+# install, so `pip install -e .` works on an HPC node with no network access to
+# fetch a build backend. Fully PEP 517 either way.
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scaffold-sparsify"
+version = "0.1.0"
+description = "SCAFFOLD: dilation- and congestion-aware graph sparsification for GNNs"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "BSD-3-Clause" }
+authors = [{ name = "Siddhartha Shankar Das", email = "siddhartha047@gmail.com" }]
+keywords = [
+    "graph",
+    "graph-sparsification",
+    "graph-neural-networks",
+    "spanning-tree",
+    "dilation",
+    "congestion",
+    "pytorch-geometric",
+    "networkx",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+dependencies = [
+    "numpy>=1.21",
+    "scipy>=1.8",
+]
+
+[project.optional-dependencies]
+# numba JIT-compiles the union-find / LCA / prefix-sum kernels. Everything runs
+# without it, roughly 10-50x slower on large graphs.
+speed = ["numba>=0.57"]
+networkx = ["networkx>=2.8"]
+pyg = ["torch>=1.13", "torch-geometric>=2.3"]
+viz = ["matplotlib>=3.5", "networkx>=2.8"]
+# Everything except torch, which users should install for their own CUDA build.
+all = ["numba>=0.57", "networkx>=2.8", "matplotlib>=3.5"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "networkx>=2.8",
+    "matplotlib>=3.5",
+    "numba>=0.57",
+    "build>=1.0",
+    "twine>=4.0",
+    "ruff>=0.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/siddhartha047/Scaffold"
+Repository = "https://github.com/siddhartha047/Scaffold"
+Issues = "https://github.com/siddhartha047/Scaffold/issues"
+Changelog = "https://github.com/siddhartha047/Scaffold/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+py-modules = ["scaffold_sparsify"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["scaffold*"]
+
+[tool.setuptools.package-data]
+scaffold = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 92
+target-version = "py39"
+src = ["src", "tests", "examples"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",    # line length is handled by the formatter
+    "B905",    # zip(strict=) is 3.10+
+    # The package supports Python 3.9, so `Optional[X]` / `List[X]` stay. They
+    # are legal under `from __future__ import annotations`, but writing
+    # `X | None` in source that 3.9 users read and copy from invites runtime
+    # errors the moment one of them uses it outside an annotation.
+    "UP006",   # non-pep585-annotation  (List -> list)
+    "UP007",   # non-pep604-annotation  (Union -> |)
+    "UP035",   # deprecated-import      (typing.List)
+    "UP045",   # non-pep604-annotation-optional  (Optional -> | None)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"examples/*" = ["E402"]      # examples run top-level code between section headers
+"src/scaffold/__init__.py" = ["F401"]
+"src/scaffold_sparsify.py" = ["F401", "F403"]

@@ -1,0 +1,331 @@
+# SCAFFOLD
+
+**Dilation- and congestion-aware graph sparsification.**
+
+Most graph sparsifiers decide which edges to *delete*. SCAFFOLD works the other
+way round: it starts from a spanning forest — so the output has the input's
+connected components by construction — and then spends the remaining edge
+budget on the edges whose absence hurts most, measured by how far apart their
+endpoints end up and how much traffic the detour forces through the surviving
+structure.
+
+```bash
+pip install scaffold-sparsify
+```
+
+```python
+import scaffold
+
+result = scaffold.fast(G, keep_ratio=0.2)   # 20% of the edges
+print(result.summary())
+# scaffold.fast: 10,556 -> 2,112 undirected edges (20.0% kept, 2,708 nodes)
+
+sparse = result.to_pyg()          # or .to_networkx(), .to_scipy(), .to_torch()
+```
+
+`G` can be a NetworkX graph, a PyTorch Geometric `Data`, a `scipy.sparse`
+matrix, or a plain `(2, m)` `edge_index` array.
+
+---
+
+## The four algorithms
+
+All four take the same arguments and (except `sample`) return the same object,
+so comparing them is a one-word change.
+
+| | what it does | cost | use it when |
+|---|---|---|---|
+| `scaffold.exact` | Reference greedy. Rescores every candidate after every insertion. | `O(M·m·(n+m))` | Validating; small graphs; you want the ground truth. |
+| `scaffold.heap` | Lazy greedy. Stale scores in a heap; rescores only what an insertion actually changed. | ~`O(M·k·(n+m))` | Mid-sized graphs where you want to stay close to Exact. |
+| **`scaffold.fast`** | **Scores every candidate exactly in one tree-prefix pass. No path search anywhere.** | **`O(m log n + n)`** | **Default. Real graphs.** |
+| `scaffold.sample` | Returns per-edge *weights*, not a subgraph. Draw a fresh graph every epoch. | precompute once, then `O(m)` per draw | GNN training with per-epoch resparsification. |
+
+```python
+result = scaffold.exact(G,  keep_ratio=0.2)
+result = scaffold.heap(G,   keep_ratio=0.2)
+result = scaffold.fast(G,   keep_ratio=0.2)
+scores = scaffold.sample(G)
+
+# or by name
+result = scaffold.sparsify(G, method="fast", keep_ratio=0.2)
+```
+
+### What makes `fast` fast
+
+While the support graph is still the backbone forest, every term of the
+objective is a path aggregate on a *tree* — and every path aggregate on a tree
+is a difference of two root-prefix sums. So instead of one shortest-path search
+per candidate edge, the entire candidate set is scored together:
+
+1. root the forest, build a binary-lifting ancestor table;
+2. LCA of every candidate's endpoints;
+3. edge and node congestion for **all** paths at once (+1 at both endpoints,
+   −2 at the LCA, fold subtrees upward);
+4. root-prefix sums, making every path aggregate an `O(1)` difference.
+
+The scores are *identical* to what `scaffold.exact` computes in its first round.
+That equivalence is enforced by the test suite, not asserted in prose — see
+[`tests/test_scoring.py`](tests/test_scoring.py).
+
+Because the score is static during growth, the whole selection reduces to one
+top-k.
+
+The trade that buys: on a random geometric graph (600 nodes, 2,932 edges),
+`exact` takes 9,235 ms and `fast` 0.8 ms — 11,000× — for a mean dilation of
+2.68 against Exact's 2.40. Where `fast` does pay is *congestion*: a static
+score cannot see the edges already added, so it concentrates its picks.
+`selection="rounds"` and `scaffold.sample` both spread them out.
+[`docs/algorithms.md`](docs/algorithms.md) has the measured numbers across four
+graph families, including the case where `fast` looks bad.
+
+---
+
+## See it work
+
+A 12×12 lattice has no communities, no hubs and no important edges — every edge
+is equivalent by symmetry. So whatever survives sparsification is the
+*algorithm's* preference, not the graph's structure.
+
+```bash
+python examples/01_grid_demo.py --out docs/images
+```
+
+**The four methods at the same budget.** Pale red is the shared `fast-maxst`
+backbone (free — it is what guarantees connectivity); bold blue is what each
+method chose to buy with the rest of the budget.
+
+![the four methods on a grid](docs/images/grid_methods.png)
+
+**`scaffold.sample` returns weights, not a subgraph.** Left: the
+ratio-independent weight `π` for every edge. Middle: inclusion probabilities at
+a 72% budget — yellow edges have `p = 1` and appear in *every* draw. Right: one
+draw.
+
+![sample weights on a grid](docs/images/grid_scores.png)
+
+**Why that matters for training.** Any single sparsifier shows the model 72% of
+the graph and permanently discards the rest. Redrawing each epoch shows it
+nearly all of the graph, while every individual view stays small.
+
+![coverage over training](docs/images/grid_coverage.png)
+
+**Support backbones.** Every run starts from a spanning forest; which one
+changes the character of the result.
+
+![backbones](docs/images/grid_backbones.png)
+
+---
+
+## Standalone usage
+
+The core needs only NumPy and SciPy. No PyTorch anywhere.
+
+```python
+import networkx as nx
+import scaffold
+
+G = nx.karate_club_graph()
+result = scaffold.fast(G, keep_ratio=0.5, seed=0)
+
+H = result.to_networkx()          # original node labels preserved
+print(nx.is_connected(H))         # True
+
+result.mask                       # bool array over G's canonical edges
+result.edge_ids                   # indices of the kept edges
+result.edge_index                 # (2, 2k) symmetric numpy array
+result.metadata                   # runtime, backbone, delta_min, ...
+```
+
+Budgets come two ways, and never both at once:
+
+```python
+scaffold.fast(G, keep_ratio=0.1)      # ceil(0.1 * m) edges
+scaffold.fast(G, num_edges=1_000_000) # exactly this many
+```
+
+SciPy and raw arrays work the same way:
+
+```python
+import scipy.sparse as sp
+
+A = sp.load_npz("adjacency.npz")
+A_sparse = scaffold.fast(A, keep_ratio=0.2).to_scipy()
+
+edge_index = np.load("edges.npy")             # (2, m)
+result = scaffold.fast(edge_index, keep_ratio=0.2)
+```
+
+Full walkthrough: [`examples/02_standalone.py`](examples/02_standalone.py).
+
+---
+
+## PyTorch Geometric
+
+```bash
+pip install "scaffold-sparsify[pyg]"
+```
+
+```python
+from torch_geometric.datasets import Planetoid
+import scaffold
+
+data = Planetoid(root="/tmp/Cora", name="Cora")[0]
+
+result = scaffold.fast(data, keep_ratio=0.2, seed=0)
+sparse = result.to_pyg()          # x, y, train/val/test masks all preserved
+
+print(data.num_edges, "->", sparse.num_edges)
+```
+
+As a dataset transform:
+
+```python
+from scaffold.pyg import ScaffoldTransform
+
+dataset = Planetoid(
+    root="/tmp/Cora", name="Cora",
+    transform=ScaffoldTransform(method="fast", keep_ratio=0.2),
+)
+```
+
+Per-epoch resparsification — one precompute, a fresh view each epoch:
+
+```python
+from scaffold.pyg import ScaffoldResampler
+
+resampler = ScaffoldResampler(data, keep_ratio=0.2, seed=0,
+                              backbone="rotate-randst")
+
+for epoch in range(500):
+    view = resampler.epoch(epoch)      # a new Data, exact budget, exact components
+    out = model(view.x, view.edge_index)
+    ...
+```
+
+Or take the weights directly:
+
+```python
+scores = scaffold.sample(data, seed=0)
+data.edge_index, data.edge_weight = scores.to_torch()
+```
+
+Full walkthrough with a trained GCN:
+[`examples/03_pytorch_geometric.py`](examples/03_pytorch_geometric.py).
+
+---
+
+## Support backbones
+
+The backbone is the spanning forest SCAFFOLD grows from, and it is what makes
+the connectivity guarantee possible.
+
+| name | description |
+|---|---|
+| **`fast-maxst`** | **Default.** Bucketed approximate maximum spanning forest — linear-time ordering instead of a comparison sort. |
+| `fast-mst` | Same, minimizing. |
+| `maxst` / `mst` | Exact stable Kruskal, `O(m log m)`. |
+| `randst` | Kruskal on a random permutation. Re-drawn per call — this is what makes per-epoch views genuinely different. |
+| `spt` | Multi-source BFS forest. Low diameter. |
+| `glst` | Greedy low-stretch tree. Best quality, `O(n·m·|cut|)` — small graphs only. |
+| `none` | No backbone. Connectivity is then *not* guaranteed. |
+
+```python
+scaffold.fast(G, keep_ratio=0.2, backbone="randst", seed=0)
+scaffold.fast(G, keep_ratio=0.2, backbone=my_precomputed_mask)
+
+scaffold.register_backbone("mine", my_builder)   # plug in your own
+```
+
+See [`docs/backbones.md`](docs/backbones.md) and
+[`examples/04_backbones_and_tuning.py`](examples/04_backbones_and_tuning.py).
+
+---
+
+## The connectivity floor
+
+A spanning forest of a graph with `n` nodes and `c` components has `n − c`
+edges. Below `delta_min = (n − c) / m`, **no** sparsifier of any kind can keep
+the components intact. SCAFFOLD does not pretend otherwise:
+
+```python
+result = scaffold.fast(G, keep_ratio=0.05)
+result.metadata["delta_min"]                   # 0.3421
+result.metadata["below_connectivity_floor"]    # True
+result.num_components()                        # > 1, necessarily
+```
+
+Above the floor, every variant — including every `sample` draw — returns
+exactly the input's component count. Not in expectation; with probability 1.
+
+---
+
+## Tuning the objective
+
+```python
+scaffold.fast(G, keep_ratio=0.2,
+              alpha=1.0,        # dilation exponent
+              beta_edge=1.0,    # edge-congestion exponent
+              beta_node=1.0,    # node-congestion exponent
+              edge_norm_p=2.0,  # p-norm along the path's edges
+              node_norm_q=2.0)  # q-norm along the path's interior nodes
+```
+
+`score(e) = (dil/D_max)^alpha · (eConPath/E_max)^beta_edge · (vConPath/V_max)^beta_node`
+
+`alpha` rewards candidates with a long detour; the betas reward candidates whose
+detour runs through an already-overloaded part of the support, on the grounds
+that adding them relieves a bottleneck. Setting both betas to `0` disables the
+congestion terms and is noticeably faster.
+
+Details in [`docs/algorithms.md`](docs/algorithms.md).
+
+---
+
+## Installation
+
+```bash
+pip install scaffold-sparsify              # core: numpy + scipy
+pip install "scaffold-sparsify[speed]"     # + numba (10-50x on large graphs)
+pip install "scaffold-sparsify[networkx]"  # + networkx
+pip install "scaffold-sparsify[pyg]"       # + torch, torch-geometric
+pip install "scaffold-sparsify[viz]"       # + matplotlib, for the demos
+pip install "scaffold-sparsify[all]"       # everything except torch
+```
+
+Requires Python 3.9+. The distribution is `scaffold-sparsify`; the import name
+is `scaffold` (`import scaffold_sparsify` also works and is the same module).
+
+> **numba is optional but strongly recommended.** Without it the union-find,
+> LCA and prefix-sum kernels fall back to pure Python loops — correct, but only
+> fast enough for small graphs. The first call in a process pays a one-off JIT
+> compilation cost of a few hundred milliseconds.
+
+### Development install
+
+```bash
+git clone https://github.com/siddhartha047/Scaffold.git
+cd Scaffold
+pip install -e ".[dev]"
+pytest
+```
+
+---
+
+## Documentation
+
+| | |
+|---|---|
+| [`docs/algorithms.md`](docs/algorithms.md) | The objective, and how each variant evaluates it |
+| [`docs/api.md`](docs/api.md) | Complete API reference |
+| [`docs/backbones.md`](docs/backbones.md) | Choosing and writing support backbones |
+| [`docs/pytorch-geometric.md`](docs/pytorch-geometric.md) | GNN integration in depth |
+| [`examples/`](examples/) | Four runnable walkthroughs |
+
+## Citing
+
+If you use SCAFFOLD in academic work, please cite the paper. A BibTeX entry
+will be added here on publication.
+
+## License
+
+BSD 3-Clause. See [LICENSE](LICENSE).
