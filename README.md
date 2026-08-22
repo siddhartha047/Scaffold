@@ -114,7 +114,8 @@ nearly all of the graph, while every individual view stays small.
 ![coverage over training](docs/images/grid_coverage.png)
 
 **Support backbones.** Every run starts from a spanning forest; which one
-changes the character of the result.
+changes the character of the result. The randomized panels show the new
+allocation-free `fast-randst` beside the fully shuffled `randst`.
 
 ![backbones](docs/images/grid_backbones.png)
 
@@ -229,13 +230,14 @@ the connectivity guarantee possible.
 | **`fast-maxst`** | **Default.** Bucketed approximate maximum spanning forest — linear-time ordering instead of a comparison sort. |
 | `fast-mst` | Same, minimizing. |
 | `maxst` / `mst` | Exact stable Kruskal, `O(m log m)`. |
-| `randst` | Kruskal on a random permutation. Re-drawn per call — this is what makes per-epoch views genuinely different. |
+| `fast-randst` | Seeded coprime-stride random scan. No full permutation allocation; fastest randomized backbone. |
+| `randst` | Kruskal on a full random permutation. Better mixing than `fast-randst`, but slower and uses an `O(m)` order array. |
 | `spt` | Multi-source BFS forest. Low diameter. |
 | `glst` | Greedy low-stretch tree. Best quality, `O(n·m·|cut|)` — small graphs only. |
 | `none` | No backbone. Connectivity is then *not* guaranteed. |
 
 ```python
-scaffold.fast(G, keep_ratio=0.2, backbone="randst", seed=0)
+scaffold.fast(G, keep_ratio=0.2, backbone="fast-randst", seed=0)
 scaffold.fast(G, keep_ratio=0.2, backbone=my_precomputed_mask)
 
 scaffold.register_backbone("mine", my_builder)   # plug in your own

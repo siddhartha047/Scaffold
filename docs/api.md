@@ -46,6 +46,10 @@ budget for later `draw()` calls.
 them, and do not combine either one with `num_edges`; contradictory budgets
 raise `ValueError`.
 
+Built-ins are `fast-maxst` (default), `fast-mst`, `fast-randst`, `maxst`,
+`mst`, `randst`, `spt`, `glst`, and `none`. `fast_randst` is accepted as the
+research-configuration spelling of `fast-randst`.
+
 ### Objective knobs (all variants)
 
 | argument | default | meaning |

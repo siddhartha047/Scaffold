@@ -26,8 +26,8 @@ First release. Private install from the GitHub repository; see
 - `scaffold.sparsify` — dispatch by method name.
 
 **Support backbones**
-- `fast-maxst` (default), `fast-mst`, `maxst`, `mst`, `randst`, `spt`, `glst`,
-  `none`.
+- `fast-maxst` (default), `fast-mst`, `fast-randst`, `maxst`, `mst`, `randst`,
+  `spt`, `glst`, `none`.
 - `register_backbone` for custom builders; precomputed masks and edge-id arrays
   accepted directly.
 
@@ -61,7 +61,7 @@ First release. Private install from the GitHub repository; see
 - Demo graphs (`grid_graph`, `ring_of_cliques`, `random_geometric`) and
   plotting helpers in `scaffold.viz`.
 - Four runnable examples and a visual grid-graph walkthrough.
-- 248 tests, including exact equivalence between the tree-prefix kernel and the
+- 259 tests, including exact equivalence between the tree-prefix kernel and the
   shortest-path reference across five backbones and four parameter sets.
 
 ### Notes

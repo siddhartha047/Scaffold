@@ -86,6 +86,40 @@ def _forest_mask_kernel(num_nodes, src, dst, visit, max_edges):
 
 
 @jit
+def _strided_forest_mask_kernel(
+    num_nodes, src, dst, offset, stride, max_edges
+):
+    """Kruskal over a cyclic arithmetic permutation without materializing it."""
+    parent = np.arange(num_nodes)
+    rank = np.zeros(num_nodes, dtype=np.int8)
+    mask = np.zeros(src.shape[0], dtype=np.bool_)
+    added = 0
+    m = src.shape[0]
+    for step in range(m):
+        if added >= max_edges:
+            break
+        i = (offset + step * stride) % m
+        u = src[i]
+        v = dst[i]
+        if u == v:
+            continue
+        ru = _dsu_find(parent, u)
+        rv = _dsu_find(parent, v)
+        if ru == rv:
+            continue
+        if rank[ru] < rank[rv]:
+            parent[ru] = rv
+        elif rank[ru] > rank[rv]:
+            parent[rv] = ru
+        else:
+            parent[rv] = ru
+            rank[ru] += 1
+        mask[i] = True
+        added += 1
+    return mask
+
+
+@jit
 def _component_count_kernel(num_nodes, src, dst):
     parent = np.arange(num_nodes)
     components = num_nodes
@@ -376,6 +410,36 @@ def spanning_forest_mask(num_nodes, src, dst, visit_order, max_edges=None):
     if limit == 0:
         return np.zeros(src.shape[0], dtype=bool)
     return np.asarray(_forest_mask_kernel(num_nodes, src, dst, visit_order, limit))
+
+
+def strided_spanning_forest_mask(
+    num_nodes, src, dst, offset, stride, max_edges=None
+):
+    """Forest from a coprime strided edge scan, without an ``O(m)`` order array.
+
+    When ``gcd(stride, m) == 1``, ``(offset + step * stride) % m`` visits every
+    edge exactly once. This is the allocation-free traversal used by the
+    ``fast-randst`` backbone.
+    """
+    num_nodes = int(num_nodes)
+    src = np.ascontiguousarray(src, dtype=np.int64)
+    dst = np.ascontiguousarray(dst, dtype=np.int64)
+    m = int(src.shape[0])
+    if m == 0:
+        return np.zeros(0, dtype=bool)
+    offset = int(offset) % m
+    stride = int(stride) % m
+    if stride == 0 or math.gcd(stride, m) != 1:
+        raise ValueError(f"stride must be coprime with the edge count ({m})")
+    limit = num_nodes if max_edges is None else int(max_edges)
+    limit = max(0, min(limit, num_nodes))
+    if limit == 0:
+        return np.zeros(m, dtype=bool)
+    return np.asarray(
+        _strided_forest_mask_kernel(
+            num_nodes, src, dst, offset, stride, limit
+        )
+    )
 
 
 def component_count(num_nodes, src, dst):

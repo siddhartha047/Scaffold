@@ -38,7 +38,7 @@ def figure_backbones(graph, positions, out_dir):
     """Every SCAFFOLD run starts from a spanning forest. They differ a lot."""
     import matplotlib.pyplot as plt
 
-    names = ["fast-maxst", "maxst", "randst", "spt", "glst"]
+    names = ["fast-maxst", "maxst", "fast-randst", "randst", "spt", "glst"]
     fig, axes = plt.subplots(1, len(names), figsize=(3.2 * len(names), 3.6))
     for ax, name in zip(np.atleast_1d(axes), names):
         mask = build_backbone(graph, name, seed=SEED)
