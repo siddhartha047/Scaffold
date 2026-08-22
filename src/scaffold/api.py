@@ -26,6 +26,15 @@ __all__ = ["exact", "heap", "fast", "sample", "sparsify", "METHODS"]
 _SCORE_KEYS = ("alpha", "beta_edge", "beta_node", "edge_norm_p", "node_norm_q")
 
 
+def _resolve_keep_ratio(keep_ratio, target_ratio):
+    """Accept the research code's ``target_ratio`` as a public API alias."""
+    if target_ratio is None:
+        return keep_ratio
+    if keep_ratio is not None:
+        raise ValueError("Specify either keep_ratio or target_ratio, not both.")
+    return target_ratio
+
+
 def _split_score_params(kwargs):
     """Pull the objective knobs out of ``**kwargs`` into a ``ScoreParams``."""
     params = kwargs.pop("params", None)
@@ -68,6 +77,7 @@ def exact(
     num_edges: Optional[int] = None,
     backbone=DEFAULT_BACKBONE,
     seed=None,
+    target_ratio: Optional[float] = None,
     **kwargs,
 ) -> ScaffoldResult:
     """SCAFFOLD-Exact -- reference greedy, rescoring everything every round.
@@ -82,7 +92,10 @@ def exact(
         ``(2, m)`` edge_index, or a :class:`~scaffold.graph.Graph`).
     keep_ratio:
         Fraction of undirected edges to retain; the budget is
-        ``ceil(keep_ratio * m)``. Mutually exclusive with ``num_edges``.
+        ``ceil(keep_ratio * m)``. Mutually exclusive with ``target_ratio`` and
+        ``num_edges``.
+    target_ratio:
+        Alias for ``keep_ratio``, matching the research configuration name.
     num_edges:
         Exact undirected edge budget.
     backbone:
@@ -102,6 +115,7 @@ def exact(
     >>> result.sparse_edges <= result.original_edges
     True
     """
+    keep_ratio = _resolve_keep_ratio(keep_ratio, target_ratio)
     graph, params, kwargs = _prepare(G, kwargs)
     mask, metadata = _exact.run(
         graph, keep_ratio=keep_ratio, num_edges=num_edges,
@@ -116,6 +130,7 @@ def heap(
     num_edges: Optional[int] = None,
     backbone=DEFAULT_BACKBONE,
     seed=None,
+    target_ratio: Optional[float] = None,
     **kwargs,
 ) -> ScaffoldResult:
     """SCAFFOLD-Heap -- lazy top-k greedy with local invalidation.
@@ -127,6 +142,7 @@ def heap(
     Extra options: ``top_k``, ``add_per_round``, ``clusters``,
     ``cluster_method``, ``local_radius``, ``dirty_limit``, ``score_form``.
     """
+    keep_ratio = _resolve_keep_ratio(keep_ratio, target_ratio)
     graph, params, kwargs = _prepare(G, kwargs)
     mask, metadata = _heap.run(
         graph, keep_ratio=keep_ratio, num_edges=num_edges,
@@ -141,6 +157,7 @@ def fast(
     num_edges: Optional[int] = None,
     backbone=DEFAULT_BACKBONE,
     seed=None,
+    target_ratio: Optional[float] = None,
     **kwargs,
 ) -> ScaffoldResult:
     """SCAFFOLD-Fast -- exact scores in one ``O(m log n + n)`` tree-prefix pass.
@@ -160,6 +177,7 @@ def fast(
     >>> result.num_components() == 1
     True
     """
+    keep_ratio = _resolve_keep_ratio(keep_ratio, target_ratio)
     graph, params, kwargs = _prepare(G, kwargs)
     mask, metadata = _fast.run(
         graph, keep_ratio=keep_ratio, num_edges=num_edges,
@@ -173,6 +191,7 @@ def sample(
     keep_ratio: Optional[float] = None,
     num_edges: Optional[int] = None,
     seed=None,
+    target_ratio: Optional[float] = None,
     **kwargs,
 ) -> ScaffoldScores:
     """SCAFFOLD-Sample -- per-edge weights for sampling, not a fixed subgraph.
@@ -197,6 +216,7 @@ def sample(
     >>> weights = scores.edge_weight       # one weight per (directed) edge
     >>> view = scores.draw(keep_ratio=0.5)  # a concrete sparse graph
     """
+    keep_ratio = _resolve_keep_ratio(keep_ratio, target_ratio)
     graph, params, kwargs = _prepare(G, kwargs)
     # Validated here even though no subgraph is produced: the budget is
     # remembered as the default for draw() / inclusion_probabilities(), and a
@@ -282,6 +302,7 @@ def sparsify(
     keep_ratio: Optional[float] = None,
     num_edges: Optional[int] = None,
     seed=None,
+    target_ratio: Optional[float] = None,
     **kwargs,
 ):
     """Run any SCAFFOLD variant by name.
@@ -301,6 +322,7 @@ def sparsify(
     heap 30
     fast 30
     """
+    keep_ratio = _resolve_keep_ratio(keep_ratio, target_ratio)
     key = str(method).strip().lower().replace("_", "-")
     for prefix in ("scaffold-", "scaffold"):
         if key.startswith(prefix):

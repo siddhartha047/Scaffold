@@ -12,6 +12,12 @@ While `siddhartha047/Scaffold` is a private GitHub repository, pip can install
 straight from it. No package index is involved, so nothing is published
 anywhere, and only people with repo access can install it.
 
+Plain `pip install scaffold-sparse` is intentionally **not available during
+this phase**: that command asks the configured package index, and PyPI is
+public. While testing privately, use the Git URL or a wheel below. The plain
+command becomes available only after the public PyPI release (or after setting
+up a separate authenticated private Python package index).
+
 ### For yourself
 
 ```bash
@@ -28,11 +34,11 @@ Over SSH (they need an SSH key on their GitHub account):
 ```bash
 pip install "git+ssh://git@github.com/siddhartha047/Scaffold.git"
 
-# a specific commit or tag, which is what you want for a reproducible experiment
-pip install "git+ssh://git@github.com/siddhartha047/Scaffold.git@v0.1.0"
+# a specific commit, which is what you want during private testing
+pip install "git+ssh://git@github.com/siddhartha047/Scaffold.git@<commit-sha>"
 
 # with extras
-pip install "scaffold-sparsify[pyg] @ git+ssh://git@github.com/siddhartha047/Scaffold.git"
+pip install "scaffold-sparse[pyg] @ git+ssh://git@github.com/siddhartha047/Scaffold.git"
 ```
 
 Over HTTPS with a personal access token (repo scope), for CI or machines
@@ -45,7 +51,7 @@ pip install "git+https://${GITHUB_TOKEN}@github.com/siddhartha047/Scaffold.git"
 In a `requirements.txt`:
 
 ```
-scaffold-sparsify @ git+ssh://git@github.com/siddhartha047/Scaffold.git@v0.1.0
+scaffold-sparse @ git+ssh://git@github.com/siddhartha047/Scaffold.git@<commit-sha>
 ```
 
 ### Distributing a built wheel
@@ -53,8 +59,8 @@ scaffold-sparsify @ git+ssh://git@github.com/siddhartha047/Scaffold.git@v0.1.0
 If a collaborator has no repo access, hand them a wheel directly:
 
 ```bash
-python -m build            # -> dist/scaffold_sparsify-0.1.0-py3-none-any.whl
-pip install dist/scaffold_sparsify-0.1.0-py3-none-any.whl
+python -m build            # -> dist/scaffold_sparse-0.1.0-py3-none-any.whl
+pip install dist/scaffold_sparse-0.1.0-py3-none-any.whl
 ```
 
 ### What *not* to do while private
@@ -79,6 +85,9 @@ python examples/02_standalone.py
 python examples/03_pytorch_geometric.py
 python examples/04_backbones_and_tuning.py
 
+# optional but recommended when the sibling research checkout is available
+python validation/compare_research.py
+
 # 3. it builds
 rm -rf dist/ build/ src/*.egg-info
 python -m build
@@ -88,7 +97,7 @@ python -m twine check dist/*
 
 # 5. the built wheel actually works, in a fresh venv
 python -m venv /tmp/scaffold-test
-/tmp/scaffold-test/bin/pip install "dist/scaffold_sparsify-0.1.0-py3-none-any.whl[all]"
+/tmp/scaffold-test/bin/pip install "dist/scaffold_sparse-0.1.0-py3-none-any.whl[all]"
 /tmp/scaffold-test/bin/python -c "
 import scaffold
 print(scaffold.__version__)
@@ -111,7 +120,7 @@ module shows up here and nowhere else.
 - [ ] `CHANGELOG.md` has a dated entry for the version
 - [ ] The version in `src/scaffold/_version.py` matches the tag you are about to push
 - [ ] `README.md` figures are regenerated and committed
-- [ ] The name `scaffold-sparsify` is still free on PyPI
+- [ ] The name `scaffold-sparse` is still free on PyPI
 - [ ] Repo visibility changed to public
 - [ ] A citation entry is in `README.md` if the paper is out
 
@@ -129,7 +138,7 @@ NumPy and SciPy are not mirrored on TestPyPI:
 ```bash
 pip install --index-url https://test.pypi.org/simple/ \
             --extra-index-url https://pypi.org/simple/ \
-            scaffold-sparsify
+            scaffold-sparse
 ```
 
 ### 2b. PyPI
@@ -141,13 +150,13 @@ python -m twine upload dist/*
 Then:
 
 ```bash
-pip install scaffold-sparsify
+pip install scaffold-sparse
 ```
 
 ### 2c. Tag it
 
 ```bash
-git tag -a v0.1.0 -m "scaffold-sparsify 0.1.0"
+git tag -a v0.1.0 -m "scaffold-sparse 0.1.0"
 git push origin v0.1.0
 ```
 
@@ -193,10 +202,11 @@ Planned:
 
 ## About the name
 
-`scaffold` on PyPI is taken by an unrelated project (last release 2013), so the
-distribution is `scaffold-sparsify` while the import name stays `scaffold`.
-`import scaffold_sparsify` also works, for anyone who expects the import to
-match the distribution.
+`scaffold` on PyPI is taken by an unrelated project, so the distribution is
+`scaffold-sparse` while the canonical import name stays `scaffold`.
+`import scaffold_sparse` also works for anyone who expects the import to match
+the distribution. The earlier private-development alias
+`import scaffold_sparsify` remains compatible but is not the documented API.
 
 If you ever want the bare name, PyPI has a formal process for abandoned
 projects under PEP 541 — but do not build a release schedule around it.

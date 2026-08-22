@@ -173,20 +173,24 @@ a boolean mask of length `graph.num_edges`.
 
 ## `max_edges` and partial forests
 
-When the budget is smaller than `n − c`, a full forest cannot fit. Rather than
-building the whole thing and throwing part of it away, union-find stops as soon
-as the budget's worth of acyclic edges have been accepted:
+`build_backbone` itself can construct a deterministic partial forest when
+called with `max_edges`:
 
 ```python
 mask = build_backbone(graph, "fast-maxst", max_edges=50)
 ```
 
 The result is a genuine partial forest — still acyclic, just not spanning.
-`scaffold.*` does this automatically and reports it:
+The sparsification algorithms intentionally use a different policy when their
+budget is smaller than `n − c`: they build the complete support forest and
+uniformly randomly drop edges until the exact budget is reached. This matches
+the research implementation and avoids favoring the prefix of the backbone's
+edge order. The trim is reproducible with `seed=` and is reported in metadata:
 
 ```python
 result.metadata["below_connectivity_floor"]   # True
 result.metadata["delta_min"]                  # (n - c) / m
+result.metadata["budget_trimmed"]             # forest edges dropped (greedy)
 ```
 
 ---

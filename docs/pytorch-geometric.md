@@ -1,7 +1,7 @@
 # PyTorch Geometric integration
 
 ```bash
-pip install "scaffold-sparsify[pyg]"
+pip install "scaffold-sparse[pyg]"
 ```
 
 Everything here lives in `scaffold.pyg`, which is imported lazily — plain
@@ -17,7 +17,7 @@ import scaffold
 
 data = Planetoid(root="/tmp/Cora", name="Cora")[0]
 
-result = scaffold.fast(data, keep_ratio=0.2, seed=0)
+result = scaffold.fast(data, keep_ratio=0.6, seed=0)
 sparse = result.to_pyg()
 
 print(data.num_edges, "->", sparse.num_edges)
@@ -34,7 +34,7 @@ One call, if you don't need the intermediate result:
 ```python
 from scaffold.pyg import sparsify_data
 
-sparse = sparsify_data(data, method="fast", keep_ratio=0.2, seed=0)
+sparse = sparsify_data(data, method="fast", keep_ratio=0.6, seed=0)
 ```
 
 ### Conventions
@@ -42,9 +42,10 @@ sparse = sparsify_data(data, method="fast", keep_ratio=0.2, seed=0)
 - Input `edge_index` is canonicalized: self loops dropped, `(u,v)` and `(v,u)`
   collapsed to one undirected edge, sorted.
 - Output `edge_index` is **symmetric** — both directions present, `(2, 2k)`.
-- `keep_ratio` counts **undirected** edges. `keep_ratio=0.2` on Cora's
-  `edge_index=[2, 10556]` gives `[2, 2112]`, i.e. 1,056 undirected edges kept
-  of 5,278.
+- `keep_ratio` counts **undirected** edges. `keep_ratio=0.6` on Cora's
+  `edge_index=[2, 10556]` gives `[2, 6334]`, i.e. 3,167 undirected edges kept
+  of 5,278. This is above Cora's 2,630-edge connectivity floor, so it exercises
+  both the support forest and the LCA-ranked additions.
 - `edge_attr` is read as an edge weight only when it is 1-D or single-column;
   multi-dimensional attributes are ignored rather than guessed at.
 
@@ -58,7 +59,7 @@ from scaffold.pyg import ScaffoldTransform
 dataset = Planetoid(
     root="/tmp/Cora",
     name="Cora",
-    transform=ScaffoldTransform(method="fast", keep_ratio=0.2, seed=0),
+    transform=ScaffoldTransform(method="fast", keep_ratio=0.6, seed=0),
 )
 data = dataset[0]      # already sparsified
 ```
@@ -67,7 +68,7 @@ data = dataset[0]      # already sparsified
 changes each time:
 
 ```python
-ScaffoldTransform(method="fast", keep_ratio=0.2, seed=0, resample=True)
+ScaffoldTransform(method="fast", keep_ratio=0.6, seed=0, resample=True)
 ```
 
 That re-runs the whole sparsifier per access. For per-epoch resparsification
@@ -90,7 +91,7 @@ from scaffold.pyg import ScaffoldResampler
 
 resampler = ScaffoldResampler(
     data,
-    keep_ratio=0.2,
+    keep_ratio=0.6,
     seed=0,
     backbone="rotate-randst",   # the guaranteed forest rotates too
     tree_count=8,               # forests aggregated during precompute
@@ -107,8 +108,10 @@ for epoch in range(500):
     optimizer.step()
 ```
 
-Each `view` has **exactly** the requested edge count and **exactly** the input
-graph's connected components — with probability 1, not in expectation.
+Each `view` has **exactly** the requested edge count. At or above
+`resampler.delta_min`, it also has **exactly** the input graph's connected
+components — with probability 1, not in expectation. Below that floor, no
+sparsifier can preserve all components.
 
 ### Is it buying you anything?
 
@@ -116,9 +119,9 @@ Check before you commit to it:
 
 ```python
 resampler.coverage(epochs=(1, 10, 100, 500))
-# {'always_included': 2708,
-#  'median_epochs_to_first_inclusion': 4.9,
-#  'coverage_curve': {1: 0.20, 10: 0.63, 100: 0.94, 500: 0.99}}
+# {'always_included': 2630,
+#  'median_epochs_to_first_inclusion': 2.04,
+#  'coverage_curve': {1: 0.60, 10: 0.91, 100: 0.99, 500: 0.99}}
 ```
 
 `always_included` is the *deterministic core* — edges present in every draw.
@@ -191,7 +194,7 @@ on any mismatch — weights are indexed positionally, so a silent mismatch would
 corrupt every draw.
 
 **Install numba.** Without it the union-find, LCA and prefix-sum kernels run as
-pure Python loops. `pip install "scaffold-sparsify[speed]"`.
+pure Python loops. `pip install "scaffold-sparse[speed]"`.
 
 **Lower `tree_count`.** The precompute is linear in it. `tree_count=4` is a
 reasonable large-graph setting; `1` gives frequency-free weights driven purely
@@ -242,5 +245,5 @@ a synthetic graph so it works offline.
 
 ```bash
 python examples/03_pytorch_geometric.py
-python examples/03_pytorch_geometric.py --dataset Cora --keep-ratio 0.2
+python examples/03_pytorch_geometric.py --dataset Cora --keep-ratio 0.6
 ```

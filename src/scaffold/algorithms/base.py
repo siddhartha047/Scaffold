@@ -42,13 +42,15 @@ class GrowthContext:
 
         self.target_edges = resolve_budget(graph.num_edges, keep_ratio, num_edges)
 
-        # The backbone is capped at the budget: when the target is below n-1
-        # there is no point building a full forest and throwing part of it away.
+        # Always construct the complete support forest first.  If the requested
+        # budget is below the connectivity floor, ``finish`` trims that forest
+        # uniformly at random.  Besides matching the research implementation,
+        # this avoids a deterministic edge-order bias at very small budgets.
         self.backbone_name = backbone if isinstance(backbone, str) else "custom"
         self.backbone_mask = build_backbone(
             graph,
             backbone,
-            max_edges=self.target_edges,
+            max_edges=None,
             seed=seed,
             **(backbone_options or {}),
         )
@@ -103,11 +105,12 @@ class GrowthContext:
 
     # -- reporting ----------------------------------------------------------
     def finish(self, algorithm: str, **extra):
-        elapsed = time.perf_counter() - self.started
         trimmed = self.trim_to_budget()
+        elapsed = time.perf_counter() - self.started
         metadata = {
             "method": algorithm,
             "backbone": self.backbone_name,
+            "support_budget_mode": "full_then_random_trim",
             "backbone_edges": int(self.backbone_mask.sum()),
             "target_edges": int(self.target_edges),
             "selected_edges": self.selected,
@@ -119,9 +122,6 @@ class GrowthContext:
         }
         if self.base_components is not None:
             spanning_edges = self.graph.num_nodes - self.base_components
-            # Tested against the floor directly, not inferred from whether a
-            # trim happened: the backbone is capped at the budget, so a run
-            # below the floor builds a partial forest and never overshoots.
             metadata["base_components"] = int(self.base_components)
             metadata["delta_min"] = float(self.delta_min)
             metadata["below_connectivity_floor"] = bool(

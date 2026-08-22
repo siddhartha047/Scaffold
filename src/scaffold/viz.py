@@ -1,6 +1,6 @@
 """Plotting helpers, built around the grid-graph demo.
 
-Requires matplotlib (``pip install "scaffold-sparsify[viz]"``). Imported lazily
+Requires matplotlib (``pip install "scaffold-sparse[viz]"``). Imported lazily
 by ``scaffold.viz``, so it costs nothing unless you use it.
 
 The point of drawing a *grid* is that a lattice has no interesting structure to

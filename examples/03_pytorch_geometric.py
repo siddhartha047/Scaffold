@@ -5,7 +5,7 @@ Run::
     python examples/03_pytorch_geometric.py                 # synthetic graph
     python examples/03_pytorch_geometric.py --dataset Cora  # downloads Planetoid
 
-Requires ``pip install "scaffold-sparsify[torch]"``. With no ``--dataset`` it
+Requires ``pip install "scaffold-sparse[pyg]"``. With no ``--dataset`` it
 builds a synthetic graph so the script runs anywhere, offline.
 
 Covers:
@@ -131,7 +131,7 @@ def train_model(data, epochs=100, resampler=None, seed=0, hidden=64):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", default=None, help="Cora / CiteSeer / PubMed")
-    parser.add_argument("--keep-ratio", type=float, default=0.3)
+    parser.add_argument("--keep-ratio", type=float, default=0.6)
     parser.add_argument("--epochs", type=int, default=100)
     args = parser.parse_args()
 
@@ -163,7 +163,7 @@ def main():
     print(f"  {transform}")
     print(f"  transform(data) -> {transform(data)}")
     print("\n  With a real dataset:")
-    print("    Planetoid(root=..., name='Cora', transform=ScaffoldTransform(keep_ratio=0.2))")
+    print("    Planetoid(root=..., name='Cora', transform=ScaffoldTransform(keep_ratio=0.6))")
 
     # ------------------------------------------------------------------
     section("3. scaffold.sample gives edge weights, not a subgraph")

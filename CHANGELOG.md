@@ -44,6 +44,9 @@ First release. Private install from the GitHub repository; see
 - `ScaffoldScores` for `sample`, adding `.inclusion_probabilities()`,
   `.draw()`, `.to_dict()` and coverage reporting.
 - `delta_min` and `below_connectivity_floor` reported on every result.
+- Below the connectivity floor, every variant builds its complete support
+  forest and applies a seeded uniform random trim to the exact edge budget;
+  `sample.draw()` re-trims it for every view.
 
 **PyTorch Geometric**
 - `ScaffoldTransform` for dataset pipelines.
@@ -51,12 +54,14 @@ First release. Private install from the GitHub repository; see
 - `sparsify_data`, `sample_edge_weight`.
 
 **Other**
+- `scaffold-sparse` distribution with canonical `import scaffold` and optional
+  `import scaffold_sparse` alias.
 - Optional numba acceleration for the union-find, LCA and prefix-sum kernels,
   with a correct pure-Python fallback.
 - Demo graphs (`grid_graph`, `ring_of_cliques`, `random_geometric`) and
   plotting helpers in `scaffold.viz`.
 - Four runnable examples and a visual grid-graph walkthrough.
-- 199 tests, including exact equivalence between the tree-prefix kernel and the
+- 247 tests, including exact equivalence between the tree-prefix kernel and the
   shortest-path reference across five backbones and four parameter sets.
 
 ### Notes

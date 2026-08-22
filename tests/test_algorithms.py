@@ -17,6 +17,7 @@ import pytest
 
 import scaffold
 from conftest import ALL_METHODS, GREEDY_METHODS, sparsify_any
+from scaffold.backbone import build_backbone
 
 
 # ----------------------------------------------------------------------
@@ -42,6 +43,26 @@ def test_num_edges_budget(grid, method):
 def test_budget_arguments_are_mutually_exclusive(grid, method):
     with pytest.raises(ValueError, match="not both"):
         scaffold.sparsify(grid, method=method, keep_ratio=0.5, num_edges=50)
+
+
+@pytest.mark.parametrize("method", ALL_METHODS)
+def test_target_ratio_alias_matches_keep_ratio(grid, method):
+    by_keep = scaffold.sparsify(grid, method=method, keep_ratio=0.7, seed=0)
+    by_target = scaffold.sparsify(grid, method=method, target_ratio=0.7, seed=0)
+    if method == "sample":
+        by_keep = by_keep.draw(seed=0)
+        by_target = by_target.draw(seed=0)
+    np.testing.assert_array_equal(by_keep.mask, by_target.mask)
+
+
+def test_ratio_aliases_are_mutually_exclusive(grid):
+    with pytest.raises(ValueError, match="either keep_ratio or target_ratio"):
+        scaffold.fast(grid, keep_ratio=0.7, target_ratio=0.7)
+
+
+def test_target_ratio_and_num_edges_are_mutually_exclusive(grid):
+    with pytest.raises(ValueError, match="not both"):
+        scaffold.fast(grid, target_ratio=0.7, num_edges=80)
 
 
 @pytest.mark.parametrize("keep_ratio", [-0.1, 1.5])
@@ -110,9 +131,81 @@ def test_component_count_preserved_on_a_disconnected_graph(disconnected, method)
 def test_below_the_floor_it_fragments_and_says_so(grid, method):
     floor = (grid.num_nodes - 1) / grid.num_edges
     result = sparsify_any(grid, method, floor / 2)
+    target = int(np.ceil((floor / 2) * grid.num_edges - 1e-12))
+    assert result.sparse_edges == target
     assert result.num_components() > 1
     assert result.metadata["below_connectivity_floor"] is True
     assert result.metadata["delta_min"] == pytest.approx(floor)
+
+
+@pytest.mark.parametrize("method", GREEDY_METHODS)
+def test_below_floor_builds_full_forest_then_randomly_trims(grid, method):
+    spanning_edges = grid.num_nodes - 1
+    target = spanning_edges // 2
+    result = scaffold.sparsify(grid, method=method, num_edges=target, seed=17)
+
+    assert result.metadata["backbone_edges"] == spanning_edges
+    assert result.metadata["support_budget_mode"] == "full_then_random_trim"
+    assert result.metadata["budget_trimmed"] == spanning_edges - target
+    assert result.sparse_edges == target
+
+    full_forest = build_backbone(grid, "fast-maxst")
+    assert np.all(full_forest[result.edge_ids])
+
+
+@pytest.mark.parametrize("method", GREEDY_METHODS)
+def test_below_floor_random_trim_responds_to_seed(grid, method):
+    target = (grid.num_nodes - 1) // 2
+    first = scaffold.sparsify(grid, method=method, num_edges=target, seed=1)
+    second = scaffold.sparsify(grid, method=method, num_edges=target, seed=2)
+    assert not np.array_equal(first.mask, second.mask)
+
+
+def test_all_methods_share_below_floor_trim_policy(grid):
+    target = (grid.num_nodes - 1) // 2
+    masks = [
+        scaffold.sparsify(grid, method=method, num_edges=target, seed=23).mask
+        for method in GREEDY_METHODS
+    ]
+    masks.append(scaffold.sample(grid, seed=23).draw(num_edges=target, seed=23).mask)
+    for mask in masks[1:]:
+        np.testing.assert_array_equal(mask, masks[0])
+
+
+def test_sample_below_floor_randomly_trims_full_forced_forest(grid):
+    target = (grid.num_nodes - 1) // 2
+    first_scores = scaffold.sample(grid, seed=1)
+    second_scores = scaffold.sample(grid, seed=2)
+    first = first_scores.draw(num_edges=target, seed=1)
+    repeated = scaffold.sample(grid, seed=1).draw(num_edges=target, seed=1)
+    second = second_scores.draw(num_edges=target, seed=2)
+
+    assert first.sparse_edges == target
+    assert first.metadata["forced_edges"] == target
+    assert first.metadata["support_budget_mode"] == "full_then_random_trim"
+    assert first.metadata["sampled_edges"] == 0
+    assert first.metadata["budget_trimmed"] == grid.num_nodes - 1 - target
+    np.testing.assert_array_equal(first.mask, repeated.mask)
+    assert not np.array_equal(first.mask, second.mask)
+
+
+def test_sample_retrims_below_floor_on_each_draw(grid):
+    target = (grid.num_nodes - 1) // 2
+    scores = scaffold.sample(grid, seed=5)
+    first = scores.draw(num_edges=target)
+    second = scores.draw(num_edges=target)
+    assert not np.array_equal(first.mask, second.mask)
+
+
+def test_sample_below_floor_probabilities_match_uniform_trim(grid):
+    target = (grid.num_nodes - 1) // 2
+    scores = scaffold.sample(grid, seed=5)
+    p = scores.inclusion_probabilities(num_edges=target)
+    expected = target / (grid.num_nodes - 1)
+
+    assert p.sum() == pytest.approx(target)
+    np.testing.assert_allclose(p[scores.backbone], expected)
+    assert np.all(p[~scores.backbone] == 0.0)
 
 
 @pytest.mark.parametrize("method", ALL_METHODS)

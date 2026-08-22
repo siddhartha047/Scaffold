@@ -1,7 +1,7 @@
 """PyTorch Geometric integration.
 
 Requires ``torch`` and ``torch-geometric``
-(``pip install "scaffold-sparsify[pyg]"``). Imported lazily by
+(``pip install "scaffold-sparse[pyg]"``). Imported lazily by
 ``scaffold.pyg``, so plain SciPy/NetworkX users never pay for it.
 
 Two things live here:
@@ -44,7 +44,7 @@ def sparsify_data(
     >>> from torch_geometric.datasets import Planetoid       # doctest: +SKIP
     >>> data = Planetoid("/tmp/Cora", "Cora")[0]             # doctest: +SKIP
     >>> from scaffold.pyg import sparsify_data               # doctest: +SKIP
-    >>> sparse = sparsify_data(data, keep_ratio=0.2)         # doctest: +SKIP
+    >>> sparse = sparsify_data(data, keep_ratio=0.6)         # doctest: +SKIP
     """
     result = _sparsify(
         data, method=method, keep_ratio=keep_ratio, num_edges=num_edges,
@@ -95,7 +95,7 @@ class ScaffoldTransform:
     >>> from torch_geometric.datasets import Planetoid              # doctest: +SKIP
     >>> from scaffold.pyg import ScaffoldTransform                  # doctest: +SKIP
     >>> dataset = Planetoid("/tmp/Cora", "Cora",                    # doctest: +SKIP
-    ...                     transform=ScaffoldTransform(keep_ratio=0.2))
+    ...                     transform=ScaffoldTransform(keep_ratio=0.6))
     """
 
     def __init__(
@@ -143,13 +143,14 @@ class ScaffoldResampler:
 
     Runs the SCAFFOLD-Sample precompute once, then serves a fresh sparse view
     per epoch for the cost of a uniform draw plus a ``searchsorted``. Every
-    view has exactly the requested edge count and exactly the input graph's
-    connected components.
+    view has exactly the requested edge count. When the budget is at or above
+    :attr:`delta_min`, it also has exactly the input graph's components; below
+    that mathematical floor, preserving them is impossible.
 
     Examples
     --------
     >>> from scaffold.pyg import ScaffoldResampler                  # doctest: +SKIP
-    >>> resampler = ScaffoldResampler(data, keep_ratio=0.2, seed=0) # doctest: +SKIP
+    >>> resampler = ScaffoldResampler(data, keep_ratio=0.6, seed=0) # doctest: +SKIP
     >>> for epoch in range(200):                                    # doctest: +SKIP
     ...     view = resampler.epoch(epoch)
     ...     out = model(view.x, view.edge_index)

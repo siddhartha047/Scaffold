@@ -28,16 +28,17 @@ Precomputation (paper Algorithm 3)
 
 Per-epoch draw (paper Algorithm 4)
 ----------------------------------
-* A complete spanning forest is unioned in **unconditionally**, so the drawn
-  graph has exactly the components of ``G`` with probability 1 -- not in
-  expectation, not with high probability.
+* At or above the connectivity floor, a complete spanning forest is unioned in,
+  so the drawn graph has exactly the components of ``G`` with probability 1 --
+  not in expectation, not with high probability. Below the floor, the forest
+  cannot fit and is budget-trimmed afresh on every draw as described below.
 * The remaining ``k`` edges come from systematic ``pi``-ps sampling over the
   tree-locality order, which yields exactly ``k`` edges with exact marginal
   inclusion probabilities.
 
 Below the connectivity floor ``delta_min = (n - c) / m`` no method can keep the
-graph's components intact; the forced set is then trimmed uniformly at random
-and ``below_connectivity_floor`` is set in the metadata.
+graph's components intact; the complete forced forest is then trimmed uniformly
+at random for each draw and ``below_connectivity_floor`` is set in the metadata.
 """
 
 from __future__ import annotations
@@ -259,12 +260,18 @@ class ScaffoldSampler:
     def inclusion_probabilities(self, keep_ratio=None, num_edges=None) -> np.ndarray:
         """Per-edge inclusion probability for a budget; sums to the budget.
 
-        Forced edges (backbone plus mandatory) get exactly 1.0.
+        Above the connectivity floor, forced edges (backbone plus mandatory)
+        get exactly 1.0. Below it, the full forced forest is uniformly trimmed,
+        so each of its edges has probability ``target / forest_size``.
         """
         self._require_fit()
         target = self._budget(keep_ratio, num_edges)
         plan = self._get_plan(target, self._rotation())
         p = np.zeros(self.graph.num_edges, dtype=np.float64)
+        if plan["trimmed"]:
+            if plan["forced"].size:
+                p[plan["forced"]] = target / plan["forced"].size
+            return p
         p[plan["forced"]] = 1.0
         p[plan["pool_order"]] = plan["p"]
         return p
@@ -306,26 +313,24 @@ class ScaffoldSampler:
         if self._plan is not None and self._plan_key == key:
             return self._plan
 
-        m = self.graph.num_edges
         forced = self._backbone_mask(rotation).copy()
         forced |= self.mandatory
+        forced_ids = np.flatnonzero(forced).astype(np.int64, copy=False)
 
-        trimmed = False
-        if int(forced.sum()) > target_edges:
-            # Below the connectivity floor: no method can stay connected here.
-            keep = np.flatnonzero(forced)
-            rng = np.random.default_rng(self.seed)
-            keep = rng.permutation(keep)[:target_edges]
-            forced = np.zeros(m, dtype=bool)
-            forced[keep] = True
-            trimmed = True
-
-        remaining = int(target_edges - forced.sum())
-        pool_order = self.order[~forced[self.order]]  # tree-locality order
+        # Keep the complete forest in the cached plan. Below the connectivity
+        # floor each draw trims it with that draw's RNG, so per-epoch
+        # resparsification does not accidentally reuse one cached subset.
+        trimmed = bool(forced_ids.size > target_edges)
+        remaining = 0 if trimmed else int(target_edges - forced_ids.size)
+        pool_order = (
+            np.zeros(0, dtype=np.int64)
+            if trimmed
+            else self.order[~forced[self.order]]  # tree-locality order
+        )
         p = cap_and_renormalize(self.pi[pool_order], remaining)
 
         self._plan = {
-            "forced": np.flatnonzero(forced).astype(np.int64),
+            "forced": forced_ids,
             "pool_order": pool_order,
             "p": p,
             "cum": np.cumsum(p),
@@ -358,8 +363,12 @@ class ScaffoldSampler:
             if draw_seed is None
             else np.random.SeedSequence([int(draw_seed), int(self._draw_index)])
         )
+        forced = plan["forced"]
+        if plan["trimmed"]:
+            drop_count = int(forced.size - target)
+            forced = rng.permutation(forced)[drop_count:]
         chosen = np.unique(
-            np.concatenate((plan["forced"], self._draw_pool(plan, rng)))
+            np.concatenate((forced, self._draw_pool(plan, rng)))
         )
 
         m = self.graph.num_edges
@@ -394,11 +403,15 @@ class ScaffoldSampler:
             undirected_edge_weight=edge_weight,
             metadata={
                 "backbone": self.backbone,
+                "support_budget_mode": "full_then_random_trim",
                 "rotation": int(rotation),
                 "draw_index": int(self._draw_index),
-                "forced_edges": int(plan["forced"].size),
+                "backbone_edges": int(plan["forced"].size),
+                "forced_edges": int(forced.size),
                 "sampled_edges": int(plan["remaining"]),
                 "target_edges": int(target),
+                "selected_edges": int(chosen.size),
+                "budget_trimmed": int(plan["forced"].size - forced.size),
                 "components": int(components),
                 "base_components": int(self.base_components),
                 "delta_min": float(self.delta_min),

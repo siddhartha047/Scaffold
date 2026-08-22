@@ -1,17 +1,18 @@
 [build-system]
-# setuptools rather than hatchling: it ships with essentially every Python
-# install, so `pip install -e .` works on an HPC node with no network access to
-# fetch a build backend. Fully PEP 517 either way.
-requires = ["setuptools>=64", "wheel"]
+# Setuptools keeps editable installs conventional and supports modern PEP 639
+# license metadata. End users normally install the universal wheel and do not
+# need the build backend at all.
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "scaffold-sparsify"
+name = "scaffold-sparse"
 version = "0.1.0"
 description = "SCAFFOLD: dilation- and congestion-aware graph sparsification for GNNs"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "BSD-3-Clause" }
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
 authors = [{ name = "Siddhartha Shankar Das", email = "siddhartha047@gmail.com" }]
 keywords = [
     "graph",
@@ -26,7 +27,6 @@ keywords = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: BSD License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
@@ -70,7 +70,7 @@ Changelog = "https://github.com/siddhartha047/Scaffold/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
-py-modules = ["scaffold_sparsify"]
+py-modules = ["scaffold_sparse", "scaffold_sparsify"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -108,3 +108,4 @@ ignore = [
 "examples/*" = ["E402"]      # examples run top-level code between section headers
 "src/scaffold/__init__.py" = ["F401"]
 "src/scaffold_sparsify.py" = ["F401", "F403"]
+"src/scaffold_sparse.py" = ["F401", "F403"]

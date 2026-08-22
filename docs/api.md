@@ -4,20 +4,20 @@
 import scaffold
 ```
 
-The distribution is `scaffold-sparsify`; the import name is `scaffold`.
-`import scaffold_sparsify` works too and is the same module.
+The distribution is `scaffold-sparse`; the canonical import name is `scaffold`.
+`import scaffold_sparse` works too and exposes the same API.
 
 ---
 
 ## Entry points
 
-### `scaffold.sparsify(G, method="fast", keep_ratio=None, num_edges=None, seed=None, **kwargs)`
+### `scaffold.sparsify(G, method="fast", keep_ratio=None, num_edges=None, seed=None, target_ratio=None, **kwargs)`
 
 Run any variant by name. `method` is `"exact"`, `"heap"`, `"fast"` or
 `"sample"`; a leading `"scaffold-"` / `"scaffold_"` is accepted, so config
 strings work unchanged.
 
-### `scaffold.exact(G, keep_ratio=None, num_edges=None, backbone="fast-maxst", seed=None, **kwargs)`
+### `scaffold.exact(G, keep_ratio=None, num_edges=None, backbone="fast-maxst", seed=None, target_ratio=None, **kwargs)`
 ### `scaffold.heap(G, ...)`
 ### `scaffold.fast(G, ...)`
 
@@ -37,12 +37,14 @@ budget for later `draw()` calls.
 |---|---|---|
 | `G` | graph | `Graph`, `networkx.Graph`, PyG `Data`, `scipy.sparse`, `(2, m)` `edge_index`, or a dense square adjacency |
 | `keep_ratio` | `float` in `[0, 1]` | budget as a fraction: `ceil(keep_ratio · m)` undirected edges |
+| `target_ratio` | `float` in `[0, 1]` | alias for `keep_ratio`, matching the research configuration name |
 | `num_edges` | `int` | exact undirected edge budget |
 | `backbone` | `str`, mask, or callable | support forest — see [backbones.md](backbones.md) |
 | `seed` | `int` or `None` | seeds every stochastic component; never touches the global NumPy RNG |
 
-`keep_ratio` and `num_edges` are mutually exclusive; passing both raises
-`ValueError`.
+`keep_ratio` and `target_ratio` mean the same thing. Specify at most one of
+them, and do not combine either one with `num_edges`; contradictory budgets
+raise `ValueError`.
 
 ### Objective knobs (all variants)
 
@@ -78,7 +80,7 @@ overrides win over it.
 | `clusters` | `None` | `None`/`1` for one global heap, an `int`, or a per-node label array |
 | `cluster_method` | `"bfs"` | `"bfs"`, `"metis"` (needs `pymetis`), `"random"` |
 | `local_radius` | `1` | invalidation radius, in hops, after an insertion |
-| `dirty_limit` | `0` | cap on invalidations per round; `0` = unlimited |
+| `dirty_limit` | `64` | cap on invalidations per round; `0` = unlimited |
 | `score_form` | `"max"` | `"max"` or `"product"` — see [algorithms.md](algorithms.md) |
 
 ### `scaffold.fast` extras
@@ -88,8 +90,8 @@ overrides win over it.
 | `selection` | `"topk"` | `"topk"` (one global top-k) or `"rounds"` (paper Algorithm 1) |
 | `clusters` | `None` | `"rounds"` only |
 | `cluster_method` | `"bfs"` | `"rounds"` only |
-| `sample_size` | `32` | `"rounds"` only: candidates drawn per cluster per round |
-| `add_per_round` | `64` | `"rounds"` only: edges committed per cluster per round |
+| `sample_size` | `64` | `"rounds"` only: candidates drawn per cluster per round |
+| `add_per_round` | `8` | `"rounds"` only: edges committed per cluster per round |
 | `weighted_paths` | `False` | measure detour length as a sum of tree edge weights instead of hops |
 | `return_scores` | `False` | put the per-edge score array in `metadata["scores"]` |
 
@@ -147,9 +149,17 @@ Returned by `exact`, `heap`, `fast`, and by `ScaffoldScores.draw()`.
 ### `metadata`
 
 Always present: `method`, `num_nodes`, `original_edges`, `sparse_edges`,
-`keep_ratio`, `backbone`, `backbone_edges`, `target_edges`, `selected_edges`,
-`budget_trimmed`, `runtime`, `alpha`, `beta_edge`, `beta_node`,
+`keep_ratio`, `backbone`, `support_budget_mode`, `backbone_edges`,
+`target_edges`, `selected_edges`, `budget_trimmed`, `runtime`, `alpha`,
+`beta_edge`, `beta_node`,
 `base_components`, `delta_min`, `below_connectivity_floor`.
+
+For `exact`, `heap`, and `fast`, `budget_trimmed` is the number of edges
+randomly removed from the complete support forest when the target lies below
+the connectivity floor. The trim is reproducible with `seed=`. A concrete
+`sample` draw reports the same situation through `forced_edges`,
+`sampled_edges=0`, `budget_trimmed`, and `below_connectivity_floor=True`;
+successive draws re-trim the complete forest.
 
 Per method: `exact` adds `rounds`, `scored_candidates`, `batch_size`; `heap`
 adds `rescored_candidates`, `heap_rebuilds`, `top_k`, `clusters`, `score_form`;
