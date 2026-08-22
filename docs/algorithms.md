@@ -102,7 +102,7 @@ result = scaffold.heap(G, keep_ratio=0.2,
                        top_k=16,          # candidates rescored per round
                        add_per_round=1,   # edges committed per round
                        local_radius=1,    # invalidation radius
-                       dirty_limit=0,     # cap on invalidations (0 = unlimited)
+                       dirty_limit=64,    # default cap (0 = unlimited)
                        clusters=None)     # cluster-local heaps
 ```
 
@@ -234,8 +234,10 @@ the per-epoch cost to one uniform draw plus one `searchsorted`.
 
 ### Per-epoch draw
 
-- A complete spanning forest is unioned in **unconditionally**, so every draw
-  has exactly the components of `G` with probability 1 — not in expectation.
+- At or above the connectivity floor, a complete spanning forest is unioned in,
+  so every draw has exactly the components of `G` with probability 1 — not in
+  expectation. Below the floor, the forest cannot fit and is uniformly
+  budget-trimmed afresh on every draw.
 - The remaining `k` edges come from **systematic π-ps sampling** over the
   tree-locality order: exactly `k` edges, exact marginal inclusion
   probabilities, in one `searchsorted`.

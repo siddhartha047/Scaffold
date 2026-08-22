@@ -97,6 +97,15 @@ def test_examples_are_syntactically_valid():
         ast.parse(path.read_text(), filename=str(path))
 
 
+def test_validation_scripts_are_syntactically_valid():
+    import ast
+
+    scripts = sorted((ROOT / "validation").glob("*.py"))
+    assert scripts, "no validation scripts found"
+    for path in scripts:
+        ast.parse(path.read_text(), filename=str(path))
+
+
 def test_public_functions_have_docstrings():
     for name in ("sparsify", "exact", "heap", "fast", "sample"):
         doc = getattr(scaffold, name).__doc__

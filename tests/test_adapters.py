@@ -249,9 +249,20 @@ def test_pyg_resampler_caches_within_an_interval():
 
 
 # ----------------------------------------------------------------------
-# the alias package
+# import aliases
 # ----------------------------------------------------------------------
-def test_scaffold_sparsify_alias():
+def test_scaffold_sparse_alias():
+    import scaffold_sparse
+
+    assert scaffold_sparse.__version__ == scaffold.__version__
+    assert scaffold_sparse.fast is scaffold.fast
+    result = scaffold_sparse.sparsify(
+        scaffold_sparse.grid_graph(5, 5), keep_ratio=0.8
+    )
+    assert result.sparse_edges == int(np.ceil(0.8 * 40))
+
+
+def test_legacy_scaffold_sparsify_alias():
     import scaffold_sparsify
 
     assert scaffold_sparsify.__version__ == scaffold.__version__

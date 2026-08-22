@@ -1,14 +1,14 @@
-"""Alias for the :mod:`scaffold` package.
+"""Legacy import alias for the :mod:`scaffold` package.
 
-The distribution is named ``scaffold-sparsify`` because ``scaffold`` is taken
-on PyPI by an unrelated project, so ``import scaffold_sparsify`` is accepted
-too and means exactly the same thing::
+The distribution was called ``scaffold-sparsify`` during private development.
+It is now ``scaffold-sparse``; this module remains as a harmless compatibility
+alias for early testers::
 
     import scaffold_sparsify as scaffold
 
     result = scaffold.fast(G, keep_ratio=0.2)
 
-``scaffold`` remains the canonical import name; this module just forwards.
+New code should use ``import scaffold`` (canonical) or ``import scaffold_sparse``.
 """
 
 import scaffold as _scaffold
