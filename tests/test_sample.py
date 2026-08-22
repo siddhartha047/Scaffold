@@ -196,7 +196,7 @@ def test_fixed_randst_matches_public_backbone(grid):
 
 
 def test_four_method_visual_can_share_randst(grid):
-    import matplotlib.pyplot as plt
+    plt = pytest.importorskip("matplotlib.pyplot")
 
     backbone = build_backbone(grid, "randst", seed=7)
     fig, results = scaffold.viz.compare_methods(
