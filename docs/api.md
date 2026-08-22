@@ -105,7 +105,7 @@ overrides win over it.
 |---|---|---|
 | `tree_count` | `8` | random spanning forests to aggregate over (`R`) |
 | `aggregate_lambda` | `1.0` | mix of score vs. backbone frequency; `0` = frequency only |
-| `backbone` | `"fixed-maxst"` | `"fixed-maxst"` or `"rotate-randst"` |
+| `backbone` | `"fixed-maxst"` | `"fixed-maxst"`, `"fixed-randst"`, or `"rotate-randst"` |
 | `scheme` | `"systematic"` | sampling scheme (only systematic π-ps is implemented) |
 | `weighted_paths` | `False` | as above |
 | `verbose` | `False` | per-forest progress |
