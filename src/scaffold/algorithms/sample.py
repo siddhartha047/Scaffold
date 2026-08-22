@@ -11,8 +11,8 @@ one ``searchsorted``.
 
 Precomputation (paper Algorithm 3)
 ----------------------------------
-1. Build a deterministic MaxST backbone ``F0`` and ``R`` random spanning
-   forests ``F_1..F_R``.
+1. Build a fixed backbone ``F0`` (MaxST by default, or seeded RandST) and ``R``
+   random spanning forests ``F_1..F_R``.
 2. Score every non-tree edge exactly against each forest with the
    ``O(m log n + n)`` tree kernel.
 3. Aggregate into a single ratio-independent weight::
@@ -48,6 +48,7 @@ from typing import Optional
 
 import numpy as np
 
+from ..backbone import build_backbone
 from ..graph import Graph
 from ..kernels import (
     build_tree_index,
@@ -133,9 +134,10 @@ class ScaffoldSampler:
         self.tree_count = max(1, int(tree_count))
         self.aggregate_lambda = float(aggregate_lambda)
         backbone = str(backbone).strip().lower().replace("_", "-")
-        if backbone not in ("fixed-maxst", "rotate-randst"):
+        if backbone not in ("fixed-maxst", "fixed-randst", "rotate-randst"):
             raise ValueError(
-                "backbone must be 'fixed-maxst' or 'rotate-randst', got "
+                "backbone must be 'fixed-maxst', 'fixed-randst', or "
+                "'rotate-randst', got "
                 f"{backbone!r}"
             )
         self.backbone = backbone
@@ -181,12 +183,17 @@ class ScaffoldSampler:
             self.build_seconds = time.perf_counter() - start
             return self
 
-        # --- deterministic backbone (MaxST forest) ------------------------
-        if graph.edge_weight is None:
-            visit = np.arange(m, dtype=np.int64)
+        # --- fixed backbone used to guarantee every draw ------------------
+        if self.backbone == "fixed-randst":
+            det_mask = build_backbone(graph, "randst", seed=self.seed)
         else:
-            visit = np.argsort(-graph.edge_weight, kind="stable").astype(np.int64)
-        det_mask = spanning_forest_mask(n, src, dst, visit)
+            if graph.edge_weight is None:
+                visit = np.arange(m, dtype=np.int64)
+            else:
+                visit = np.argsort(-graph.edge_weight, kind="stable").astype(
+                    np.int64
+                )
+            det_mask = spanning_forest_mask(n, src, dst, visit)
         det_index = build_tree_index(n, src[det_mask], dst[det_mask])
         det_out = tree_scores(
             n, src, dst, det_mask, weight,
@@ -299,12 +306,12 @@ class ScaffoldSampler:
 
     # -- drawing ------------------------------------------------------------
     def _rotation(self) -> int:
-        if self.backbone == "fixed-maxst":
+        if self.backbone.startswith("fixed-"):
             return 0
         return self._draw_index % max(1, len(self.random_forests))
 
     def _backbone_mask(self, rotation: int) -> np.ndarray:
-        if self.backbone == "fixed-maxst":
+        if self.backbone.startswith("fixed-"):
             return self.det_forest
         return self.random_forests[rotation]
 
@@ -464,6 +471,7 @@ class ScaffoldSampler:
             delta_min=np.float64(self.delta_min),
             tree_count=np.int64(self.tree_count),
             aggregate_lambda=np.float64(self.aggregate_lambda),
+            backbone=np.asarray(self.backbone),
         )
         return path
 
@@ -482,14 +490,21 @@ class ScaffoldSampler:
                 "artifact does not match this graph (different edge list). "
                 "Rebuild it with scaffold.sample(graph)."
             )
-        sampler = cls(tree_count=int(data["tree_count"]),
-                      aggregate_lambda=float(data["aggregate_lambda"]), **kwargs)
+        if "backbone" in data:
+            kwargs.setdefault("backbone", str(data["backbone"].item()))
+        sampler = cls(
+            tree_count=int(data["tree_count"]),
+            aggregate_lambda=float(data["aggregate_lambda"]),
+            **kwargs,
+        )
         sampler.graph = graph
         sampler.pi = data["pi"]
         sampler.mandatory = data["mandatory"].astype(bool)
         sampler.det_forest = data["det_forest"].astype(bool)
         forests = data["random_forests"]
-        sampler.random_forests = [row.astype(bool) for row in forests] if forests.size else []
+        sampler.random_forests = (
+            [row.astype(bool) for row in forests] if forests.size else []
+        )
         sampler.order = data["order"]
         sampler.base_components = int(data["base_components"])
         sampler.delta_min = float(data["delta_min"])

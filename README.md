@@ -94,7 +94,7 @@ is equivalent by symmetry. So whatever survives sparsification is the
 python examples/01_grid_demo.py --out docs/images
 ```
 
-**The four methods at the same budget.** Pale red is the shared `fast-maxst`
+**The four methods at the same budget.** Pale red is a shared seeded `randst`
 backbone (free — it is what guarantees connectivity); bold blue is what each
 method chose to buy with the rest of the budget.
 

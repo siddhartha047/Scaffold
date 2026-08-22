@@ -32,6 +32,7 @@ from scaffold.backbone import build_backbone
 ROWS = COLS = 12
 KEEP_RATIO = 0.72  # a 12x12 grid needs 143/264 = 0.542 just to stay connected
 SEED = 0
+METHODS_FIGURE_BACKBONE = "randst"
 
 
 def figure_backbones(graph, positions, out_dir):
@@ -61,11 +62,16 @@ def figure_backbones(graph, positions, out_dir):
 def figure_methods(graph, positions, out_dir):
     """The four algorithms at one budget. Red = the backbone they share."""
     fig, results = viz.compare_methods(
-        graph, keep_ratio=KEEP_RATIO, positions=positions, seed=SEED
+        graph,
+        keep_ratio=KEEP_RATIO,
+        positions=positions,
+        seed=SEED,
+        backbone=METHODS_FIGURE_BACKBONE,
     )
     fig.suptitle(
         f"{ROWS}x{COLS} grid, keep_ratio={KEEP_RATIO:.0%} "
-        "(pale red = shared fast-maxst backbone, bold blue = edges the method chose)",
+        f"(pale red = shared {METHODS_FIGURE_BACKBONE} backbone, "
+        "bold blue = edges the method chose)",
         y=1.03,
     )
     fig.tight_layout()

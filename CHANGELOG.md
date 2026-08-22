@@ -22,7 +22,8 @@ First release. Private install from the GitHub repository; see
   sums), with `selection="topk"` (default) and `selection="rounds"`
   (paper Algorithm 1).
 - `scaffold.sample` — ratio-independent per-edge weights plus systematic π-ps
-  drawing, with exact budget and exact component preservation per draw.
+  drawing, with exact budget and exact component preservation per draw;
+  `fixed-randst` lets visual comparisons share a seeded random backbone.
 - `scaffold.sparsify` — dispatch by method name.
 
 **Support backbones**
@@ -61,7 +62,7 @@ First release. Private install from the GitHub repository; see
 - Demo graphs (`grid_graph`, `ring_of_cliques`, `random_geometric`) and
   plotting helpers in `scaffold.viz`.
 - Four runnable examples and a visual grid-graph walkthrough.
-- 259 tests, including exact equivalence between the tree-prefix kernel and the
+- 263 tests, including exact equivalence between the tree-prefix kernel and the
   shortest-path reference across five backbones and four parameter sets.
 
 ### Notes

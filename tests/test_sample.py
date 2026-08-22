@@ -18,6 +18,7 @@ import pytest
 import scaffold
 from conftest import requires_networkx
 from scaffold.algorithms.sample import ScaffoldSampler, cap_and_renormalize
+from scaffold.backbone import build_backbone
 
 
 # ----------------------------------------------------------------------
@@ -175,15 +176,37 @@ def test_default_budget_is_remembered(grid):
     assert scores.draw(keep_ratio=0.9).sparse_edges == int(np.ceil(0.9 * grid.num_edges))
 
 
-@pytest.mark.parametrize("backbone", ["fixed-maxst", "rotate-randst"])
+@pytest.mark.parametrize(
+    "backbone", ["fixed-maxst", "fixed-randst", "rotate-randst"]
+)
 def test_backbone_modes(grid, backbone):
     scores = scaffold.sample(grid, seed=0, backbone=backbone)
     draws = [scores.draw(keep_ratio=0.7) for _ in range(4)]
     assert all(d.num_components() == 1 for d in draws)
-    if backbone == "fixed-maxst":
+    if backbone.startswith("fixed-"):
         assert {d.metadata["rotation"] for d in draws} == {0}
     else:
         assert len({d.metadata["rotation"] for d in draws}) > 1
+
+
+def test_fixed_randst_matches_public_backbone(grid):
+    scores = scaffold.sample(grid, seed=7, backbone="fixed-randst")
+    expected = build_backbone(grid, "randst", seed=7)
+    np.testing.assert_array_equal(scores.backbone, expected)
+
+
+def test_four_method_visual_can_share_randst(grid):
+    import matplotlib.pyplot as plt
+
+    backbone = build_backbone(grid, "randst", seed=7)
+    fig, results = scaffold.viz.compare_methods(
+        grid, keep_ratio=0.7, seed=7, backbone="randst"
+    )
+    try:
+        for result in results.values():
+            assert np.all(result.mask[backbone])
+    finally:
+        plt.close(fig)
 
 
 def test_rotating_backbone_varies_the_guaranteed_edges(grid):
@@ -223,6 +246,15 @@ def test_artifact_save_and_load(grid, tmp_path):
     assert reloaded.draw(keep_ratio=0.7).sparse_edges == int(
         np.ceil(0.7 * grid.num_edges)
     )
+
+
+def test_artifact_preserves_fixed_randst_mode(grid, tmp_path):
+    scores = scaffold.sample(grid, seed=7, backbone="fixed-randst")
+    path = scores.sampler.save(tmp_path / "randst-weights.npz")
+    reloaded = ScaffoldSampler.load(path, grid)
+
+    assert reloaded.backbone == "fixed-randst"
+    np.testing.assert_array_equal(reloaded.det_forest, scores.backbone)
 
 
 def test_artifact_rejects_a_different_graph(grid, tmp_path):

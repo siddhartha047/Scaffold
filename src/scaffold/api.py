@@ -207,7 +207,8 @@ def sample(
 
     Extra options: ``tree_count`` (number of random forests to aggregate over),
     ``aggregate_lambda`` (score-vs-frequency mix), ``backbone``
-    (``"fixed-maxst"`` or ``"rotate-randst"``), ``weighted_paths``.
+    (``"fixed-maxst"``, ``"fixed-randst"``, or ``"rotate-randst"``),
+    ``weighted_paths``.
 
     Examples
     --------

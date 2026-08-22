@@ -215,7 +215,8 @@ the per-epoch cost to one uniform draw plus one `searchsorted`.
 
 ### Precomputation
 
-1. Build a deterministic MaxST backbone `F₀` and `R` random spanning forests.
+1. Build a fixed backbone `F₀` (MaxST by default, or seeded `randst`) and `R`
+   random spanning forests.
 2. Score every non-tree edge exactly against each forest with the tree kernel —
    `O(m log n + n)` per forest.
 3. Aggregate into a single **ratio-independent** weight:

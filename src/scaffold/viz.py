@@ -156,6 +156,7 @@ def compare_methods(
     methods: Sequence[str] = ("exact", "heap", "fast", "sample"),
     positions=None,
     seed=0,
+    backbone=None,
     show_backbone: bool = True,
     figsize=None,
     **kwargs,
@@ -168,10 +169,12 @@ def compare_methods(
     import matplotlib.pyplot as plt
 
     from .api import sparsify
-    from .backbone import DEFAULT_BACKBONE, build_backbone
+    from .backbone import DEFAULT_BACKBONE, build_backbone, canonical_backbone_name
     from .utils.validation import resolve_budget
 
     positions = layout(graph, positions)
+    backbone = DEFAULT_BACKBONE if backbone is None else backbone
+    backbone_name = canonical_backbone_name(backbone)
     panels = 1 + len(methods)
     figsize = figsize or (3.4 * panels, 3.8)
     fig, axes = plt.subplots(1, panels, figsize=figsize)
@@ -191,16 +194,39 @@ def compare_methods(
     if show_backbone:
         highlight = build_backbone(
             graph,
-            DEFAULT_BACKBONE,
+            backbone,
             max_edges=resolve_budget(graph.num_edges, keep_ratio),
             seed=seed,
         )
 
     results = {}
     for ax, method in zip(axes[1:], methods):
-        result = sparsify(graph, method=method, keep_ratio=keep_ratio, seed=seed)
         if method == "sample":
+            sample_backbones = {
+                "fast-maxst": "fixed-maxst",
+                "randst": "fixed-randst",
+            }
+            if backbone_name not in sample_backbones:
+                raise ValueError(
+                    "the four-method comparison can share only a fast-maxst "
+                    "or randst backbone with scaffold.sample"
+                )
+            result = sparsify(
+                graph,
+                method=method,
+                keep_ratio=keep_ratio,
+                seed=seed,
+                backbone=sample_backbones[backbone_name],
+            )
             result = result.draw(keep_ratio=keep_ratio, seed=seed)
+        else:
+            result = sparsify(
+                graph,
+                method=method,
+                keep_ratio=keep_ratio,
+                seed=seed,
+                backbone=backbone,
+            )
         results[method] = result
         components = result.num_components()
         draw_graph(
