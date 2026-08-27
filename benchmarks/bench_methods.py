@@ -4,7 +4,7 @@ Run::
 
     python benchmarks/bench_methods.py                     # default sweep
     python benchmarks/bench_methods.py --sizes 20 40 80    # grid side lengths
-    python benchmarks/bench_methods.py --skip exact heap    # large graphs only
+    python benchmarks/bench_methods.py --skip greedy heap   # large graphs only
 
 Reports, per graph size and method: wall time, resulting component count, and
 two quality measures taken on the *result* rather than on the backbone forest:
@@ -31,7 +31,7 @@ import scaffold
 from scaffold.kernels import HAVE_NUMBA
 from scaffold.scoring import ScoreParams, path_scores
 
-METHODS = ("exact", "heap", "fast", "sample")
+METHODS = ("greedy", "heap", "fast", "sample")
 
 
 def measure_quality(graph, mask):

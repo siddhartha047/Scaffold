@@ -13,7 +13,7 @@ pytest
 
 ```
 src/scaffold/
-├── api.py              entry points: exact / heap / fast / sample / sparsify
+├── api.py              entry points: greedy / heap / fast / sample / sparsify
 ├── result.py           ScaffoldResult, ScaffoldScores
 ├── graph.py            the canonical internal Graph
 ├── kernels.py          numba-optional array kernels (union-find, LCA, prefix sums)

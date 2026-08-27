@@ -13,11 +13,11 @@ The distribution is `scaffold-sparse`; the canonical import name is `scaffold`.
 
 ### `scaffold.sparsify(G, method="fast", keep_ratio=None, num_edges=None, seed=None, target_ratio=None, **kwargs)`
 
-Run any variant by name. `method` is `"exact"`, `"heap"`, `"fast"` or
+Run any variant by name. `method` is `"greedy"`, `"heap"`, `"fast"` or
 `"sample"`; a leading `"scaffold-"` / `"scaffold_"` is accepted, so config
 strings work unchanged.
 
-### `scaffold.exact(G, keep_ratio=None, num_edges=None, backbone="fast-maxst", seed=None, target_ratio=None, **kwargs)`
+### `scaffold.greedy(G, keep_ratio=None, num_edges=None, backbone="fast-maxst", seed=None, target_ratio=None, **kwargs)`
 ### `scaffold.heap(G, ...)`
 ### `scaffold.fast(G, ...)`
 
@@ -67,7 +67,7 @@ query needs a different data structure.
 You may also pass a prebuilt `params=ScoreParams(...)`; individual keyword
 overrides win over it.
 
-### `scaffold.exact` extras
+### `scaffold.greedy` extras
 
 | argument | default | meaning |
 |---|---|---|
@@ -114,7 +114,7 @@ overrides win over it.
 
 ## `ScaffoldResult`
 
-Returned by `exact`, `heap`, `fast`, and by `ScaffoldScores.draw()`.
+Returned by `greedy`, `heap`, `fast`, and by `ScaffoldScores.draw()`.
 
 ### Counting convention
 
@@ -135,7 +135,7 @@ Returned by `exact`, `heap`, `fast`, and by `ScaffoldScores.draw()`.
 | `.edge_weight` | `(2k,)` or `None` |
 | `.num_nodes` | node count (unchanged by sparsification) |
 | `.original_edges`, `.sparse_edges`, `.keep_ratio` | undirected counts |
-| `.method` | `"exact"` / `"heap"` / `"fast"` / `"sample"` |
+| `.method` | `"greedy"` / `"heap"` / `"fast"` / `"sample"` |
 | `.metadata` | dict; see below |
 
 ### Methods
@@ -158,14 +158,14 @@ Always present: `method`, `num_nodes`, `original_edges`, `sparse_edges`,
 `beta_edge`, `beta_node`,
 `base_components`, `delta_min`, `below_connectivity_floor`.
 
-For `exact`, `heap`, and `fast`, `budget_trimmed` is the number of edges
+For `greedy`, `heap`, and `fast`, `budget_trimmed` is the number of edges
 randomly removed from the complete support forest when the target lies below
 the connectivity floor. The trim is reproducible with `seed=`. A concrete
 `sample` draw reports the same situation through `forced_edges`,
 `sampled_edges=0`, `budget_trimmed`, and `below_connectivity_floor=True`;
 successive draws re-trim the complete forest.
 
-Per method: `exact` adds `rounds`, `scored_candidates`, `batch_size`; `heap`
+Per method: `greedy` adds `rounds`, `scored_candidates`, `batch_size`; `heap`
 adds `rescored_candidates`, `heap_rebuilds`, `top_k`, `clusters`, `score_form`;
 `fast` adds `selection`, `mandatory_edges`, `total_stretch` (and `scores`,
 `dilation`, `edge_congestion_path`, `node_congestion_path` with

@@ -17,7 +17,7 @@ candidate set is scored together:
    ``O(1)`` difference.
 
 Total: ``O(m log n + n)``, with no path ever enumerated. The scores are
-*identical* to what SCAFFOLD-Exact computes in its first round -- the support
+*identical* to what SCAFFOLD-Greedy computes in its first round -- the support
 is the tree, so ``d_H == d_T``.
 
 Selection
@@ -51,13 +51,13 @@ Measured on a 24x24 grid at ``keep_ratio=0.64``, evaluating the *result* with
 ===================  =========  ==========  ===========
 variant              time (ms)  mean dil.   max congest.
 ===================  =========  ==========  ===========
-``exact``              1674         3.83         3.87
+``greedy``             1674         3.83         3.87
 ``topk``                  0.5      12.06        26.34
 ``rounds``                2.7      10.97        25.94
 ===================  =========  ==========  ===========
 
 On less symmetric graphs the gap mostly closes -- on a random geometric graph
-``topk`` gets 2.68 against ``exact``'s 2.40, and on Barabasi-Albert 3.82 against
+``topk`` gets 2.68 against ``greedy``'s 2.40, and on Barabasi-Albert 3.82 against
 3.66 -- so ``topk`` remains the default. Congestion is the term that suffers
 most from concentration; if that is what you care about, use ``rounds``, or use
 :mod:`~scaffold.algorithms.sample`, whose tree-locality ordering spreads by

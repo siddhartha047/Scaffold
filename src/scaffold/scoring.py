@@ -33,7 +33,7 @@ enumerated. This is ``ExactTreeScores`` in the paper.
 
 :func:`path_scores` is the literal definition: one shortest-path search per
 distinct source, valid for any ``H`` (forest or not). It is what
-SCAFFOLD-Exact and SCAFFOLD-Heap use once they have started adding cycles, and
+SCAFFOLD-Greedy and SCAFFOLD-Heap use once they have started adding cycles, and
 it is the reference the tree kernel is tested against.
 
 Three traps in the tree formulation, each of which produces plausible-looking

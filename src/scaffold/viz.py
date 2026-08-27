@@ -153,7 +153,7 @@ def draw_result(result: ScaffoldResult, ax=None, positions=None, title=None, **k
 def compare_methods(
     graph: Graph,
     keep_ratio: float = 0.5,
-    methods: Sequence[str] = ("exact", "heap", "fast", "sample"),
+    methods: Sequence[str] = ("greedy", "heap", "fast", "sample"),
     positions=None,
     seed=0,
     backbone=None,

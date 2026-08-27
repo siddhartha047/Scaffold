@@ -39,13 +39,13 @@ so comparing them is a one-word change.
 
 | | what it does | cost | use it when |
 |---|---|---|---|
-| `scaffold.exact` | Reference greedy. Rescores every candidate after every insertion. | `O(M·m·(n+m))` | Validating; small graphs; you want the ground truth. |
-| `scaffold.heap` | Lazy greedy. Stale scores in a heap; rescores only what an insertion actually changed. | ~`O(M·k·(n+m))` | Mid-sized graphs where you want to stay close to Exact. |
+| `scaffold.greedy` | Reference greedy. Rescores every candidate after every insertion. | `O(M·m·(n+m))` | Validating; small graphs; you want the ground truth. |
+| `scaffold.heap` | Lazy greedy. Stale scores in a heap; rescores only what an insertion actually changed. | ~`O(M·k·(n+m))` | Mid-sized graphs where you want to stay close to Greedy. |
 | **`scaffold.fast`** | **Scores every candidate exactly in one tree-prefix pass. No path search anywhere.** | **`O(m log n + n)`** | **Default. Real graphs.** |
 | `scaffold.sample` | Returns per-edge *weights*, not a subgraph. Draw a fresh graph every epoch. | precompute once, then `O(m)` per draw | GNN training with per-epoch resparsification. |
 
 ```python
-result = scaffold.exact(G,  keep_ratio=0.2)
+result = scaffold.greedy(G, keep_ratio=0.2)
 result = scaffold.heap(G,   keep_ratio=0.2)
 result = scaffold.fast(G,   keep_ratio=0.2)
 scores = scaffold.sample(G)
@@ -67,7 +67,7 @@ per candidate edge, the entire candidate set is scored together:
    −2 at the LCA, fold subtrees upward);
 4. root-prefix sums, making every path aggregate an `O(1)` difference.
 
-The scores are *identical* to what `scaffold.exact` computes in its first round.
+The scores are *identical* to what `scaffold.greedy` computes in its first round.
 That equivalence is enforced by the test suite, not asserted in prose — see
 [`tests/test_scoring.py`](https://github.com/siddhartha047/Scaffold/blob/main/tests/test_scoring.py).
 
@@ -75,8 +75,8 @@ Because the score is static during growth, the whole selection reduces to one
 top-k.
 
 The trade that buys: on a random geometric graph (600 nodes, 2,932 edges),
-`exact` takes 9,235 ms and `fast` 0.8 ms — 11,000× — for a mean dilation of
-2.68 against Exact's 2.40. Where `fast` does pay is *congestion*: a static
+`greedy` takes 9,235 ms and `fast` 0.8 ms — 11,000× — for a mean dilation of
+2.68 against Greedy's 2.40. Where `fast` does pay is *congestion*: a static
 score cannot see the edges already added, so it concentrates its picks.
 `selection="rounds"` and `scaffold.sample` both spread them out.
 [`docs/algorithms.md`](https://github.com/siddhartha047/Scaffold/blob/main/docs/algorithms.md) has the measured numbers across four

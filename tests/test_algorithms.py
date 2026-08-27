@@ -322,17 +322,17 @@ def test_fast_topk_is_optimal_for_the_static_score(grid):
     assert scores[topk.mask].sum() >= scores[rounds.mask].sum()
 
 
-def test_exact_batch_size_reduces_rounds(small_grid):
-    single = scaffold.exact(small_grid, keep_ratio=0.9, batch_size=1, seed=0)
-    batched = scaffold.exact(small_grid, keep_ratio=0.9, batch_size=4, seed=0)
+def test_greedy_batch_size_reduces_rounds(small_grid):
+    single = scaffold.greedy(small_grid, keep_ratio=0.9, batch_size=1, seed=0)
+    batched = scaffold.greedy(small_grid, keep_ratio=0.9, batch_size=4, seed=0)
     assert batched.metadata["rounds"] < single.metadata["rounds"]
     assert batched.sparse_edges == single.sparse_edges
 
 
-def test_heap_rescores_far_fewer_candidates_than_exact(grid):
-    exact = scaffold.exact(grid, keep_ratio=0.8, seed=0)
+def test_heap_rescores_far_fewer_candidates_than_greedy(grid):
+    greedy = scaffold.greedy(grid, keep_ratio=0.8, seed=0)
     heap = scaffold.heap(grid, keep_ratio=0.8, seed=0)
-    assert heap.metadata["rescored_candidates"] < exact.metadata["scored_candidates"]
+    assert heap.metadata["rescored_candidates"] < greedy.metadata["scored_candidates"]
 
 
 @pytest.mark.parametrize("score_form", ["max", "product"])
@@ -389,7 +389,7 @@ def test_self_loops_and_duplicates_are_removed_on_input():
 
 
 def test_unknown_method_lists_the_valid_ones(grid):
-    with pytest.raises(ValueError, match="exact"):
+    with pytest.raises(ValueError, match="greedy"):
         scaffold.sparsify(grid, method="nonesuch")
 
 

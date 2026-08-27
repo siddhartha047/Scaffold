@@ -5,7 +5,7 @@ Four algorithms behind one API::
     import scaffold
 
     result = scaffold.fast(G, keep_ratio=0.2)    # recommended default
-    result = scaffold.exact(G, keep_ratio=0.2)   # reference greedy
+    result = scaffold.greedy(G, keep_ratio=0.2)  # reference greedy
     result = scaffold.heap(G, keep_ratio=0.2)    # lazy greedy
     scores = scaffold.sample(G)                  # per-edge weights, not a subgraph
 
@@ -24,7 +24,7 @@ demonstrations, including a visual grid-graph walkthrough.
 """
 
 from ._version import __version__
-from .api import METHODS, exact, fast, heap, sample, sparsify
+from .api import METHODS, fast, greedy, heap, sample, sparsify
 from .backbone import available_backbones, register_backbone
 from .datasets import grid_graph, grid_positions, random_geometric, ring_of_cliques
 from .graph import Graph, normalize_graph
@@ -34,7 +34,7 @@ from .scoring import ScoreParams, path_scores, tree_scores
 __all__ = [
     # entry points
     "sparsify",
-    "exact",
+    "greedy",
     "heap",
     "fast",
     "sample",

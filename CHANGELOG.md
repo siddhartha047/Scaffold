@@ -14,7 +14,7 @@ First release. Private install from the GitHub repository; see
 ### Added
 
 **Algorithms**
-- `scaffold.exact` — reference greedy; rescores every candidate after every
+- `scaffold.greedy` — reference greedy; rescores every candidate after every
   insertion.
 - `scaffold.heap` — lazy greedy with a stale-score heap and local invalidation.
   Supports cluster-local heaps and both the max and p-norm score forms.

@@ -104,7 +104,7 @@ G = scaffold.grid_graph(16, 16)
 print(f"  {G}\n")
 print(f"  {'method':8s} {'edges':>7s} {'comp':>5s} {'ms':>8s}   notes")
 print(f"  {'-' * 8} {'-' * 7} {'-' * 5} {'-' * 8}   {'-' * 30}")
-for method in ("exact", "heap", "fast", "sample"):
+for method in ("greedy", "heap", "fast", "sample"):
     result = scaffold.sparsify(G, method=method, keep_ratio=0.7, seed=0)
     note = ""
     if method == "sample":

@@ -1,4 +1,4 @@
-"""The public entry points: ``exact``, ``heap``, ``fast``, ``sample``, ``sparsify``.
+"""The public entry points: ``greedy``, ``heap``, ``fast``, ``sample``, ``sparsify``.
 
 All five take any supported graph object, all five take the same budget
 arguments, and the first four return the same :class:`~scaffold.result.ScaffoldResult`.
@@ -11,8 +11,8 @@ from typing import Optional
 
 import numpy as np
 
-from .algorithms import exact as _exact
 from .algorithms import fast as _fast
+from .algorithms import greedy as _greedy
 from .algorithms import heap as _heap
 from .algorithms import sample as _sample
 from .backbone import DEFAULT_BACKBONE
@@ -21,7 +21,7 @@ from .result import ScaffoldResult, ScaffoldScores
 from .scoring import ScoreParams
 from .utils.validation import resolve_budget
 
-__all__ = ["exact", "heap", "fast", "sample", "sparsify", "METHODS"]
+__all__ = ["greedy", "heap", "fast", "sample", "sparsify", "METHODS"]
 
 _SCORE_KEYS = ("alpha", "beta_edge", "beta_node", "edge_norm_p", "node_norm_q")
 
@@ -71,7 +71,7 @@ def _build_result(graph: Graph, method: str, mask, metadata) -> ScaffoldResult:
 # ----------------------------------------------------------------------
 # the four algorithms
 # ----------------------------------------------------------------------
-def exact(
+def greedy(
     G,
     keep_ratio: Optional[float] = None,
     num_edges: Optional[int] = None,
@@ -80,7 +80,7 @@ def exact(
     target_ratio: Optional[float] = None,
     **kwargs,
 ) -> ScaffoldResult:
-    """SCAFFOLD-Exact -- reference greedy, rescoring everything every round.
+    """SCAFFOLD-Greedy -- reference greedy, rescoring everything every round.
 
     The ground truth the other variants are measured against. ``O(M * m * (n + m))``:
     correct on any graph, practical only on small ones.
@@ -111,17 +111,17 @@ def exact(
     Examples
     --------
     >>> import networkx as nx, scaffold
-    >>> result = scaffold.exact(nx.karate_club_graph(), keep_ratio=0.5)
+    >>> result = scaffold.greedy(nx.karate_club_graph(), keep_ratio=0.5)
     >>> result.sparse_edges <= result.original_edges
     True
     """
     keep_ratio = _resolve_keep_ratio(keep_ratio, target_ratio)
     graph, params, kwargs = _prepare(G, kwargs)
-    mask, metadata = _exact.run(
+    mask, metadata = _greedy.run(
         graph, keep_ratio=keep_ratio, num_edges=num_edges,
         backbone=backbone, params=params, seed=seed, **kwargs,
     )
-    return _build_result(graph, "exact", mask, metadata)
+    return _build_result(graph, "greedy", mask, metadata)
 
 
 def heap(
@@ -135,7 +135,7 @@ def heap(
 ) -> ScaffoldResult:
     """SCAFFOLD-Heap -- lazy top-k greedy with local invalidation.
 
-    Tracks Exact closely at a fraction of the cost by keeping stale scores in a
+    Tracks Greedy closely at a fraction of the cost by keeping stale scores in a
     heap and rescoring only the candidates an insertion actually affected.
     The practical choice for mid-sized graphs.
 
@@ -290,7 +290,7 @@ class _BudgetBoundSampler:
 # unified entry point
 # ----------------------------------------------------------------------
 METHODS = {
-    "exact": exact,
+    "greedy": greedy,
     "heap": heap,
     "fast": fast,
     "sample": sample,
@@ -308,7 +308,7 @@ def sparsify(
 ):
     """Run any SCAFFOLD variant by name.
 
-    ``method`` is one of ``"exact"``, ``"heap"``, ``"fast"`` (default) or
+    ``method`` is one of ``"greedy"``, ``"heap"``, ``"fast"`` (default) or
     ``"sample"``. Leading ``"scaffold-"`` / ``"scaffold_"`` prefixes are
     accepted, so config strings from the research code work unchanged.
 
@@ -316,10 +316,10 @@ def sparsify(
     --------
     >>> import scaffold
     >>> G = scaffold.grid_graph(6, 6)
-    >>> for name in ("exact", "heap", "fast"):
+    >>> for name in ("greedy", "heap", "fast"):
     ...     r = scaffold.sparsify(G, method=name, keep_ratio=0.5)
     ...     print(name, r.sparse_edges)
-    exact 30
+    greedy 30
     heap 30
     fast 30
     """
