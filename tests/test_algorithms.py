@@ -1,7 +1,7 @@
 """Algorithmic guarantees, checked for every variant.
 
 These are the properties a user is entitled to rely on, so they are tested
-against all four methods rather than one at a time:
+against all five methods rather than one at a time:
 
 * the edge budget is respected exactly,
 * the output is a subgraph of the input on the same node set,
@@ -238,7 +238,7 @@ def test_same_seed_same_result(grid, method):
     np.testing.assert_array_equal(first.mask, second.mask)
 
 
-@pytest.mark.parametrize("method", GREEDY_METHODS)
+@pytest.mark.parametrize("method", ("greedy", "heap", "fast"))
 def test_deterministic_backbone_makes_seed_irrelevant(grid, method):
     """With ``fast-maxst`` nothing is stochastic, so seeds must not matter."""
     first = scaffold.sparsify(grid, method=method, keep_ratio=0.7, seed=1)
@@ -303,23 +303,47 @@ def test_global_numpy_rng_is_not_touched(grid):
 # ----------------------------------------------------------------------
 # per-variant behaviour
 # ----------------------------------------------------------------------
-def test_fast_topk_and_rounds_agree_on_budget(grid):
-    topk = scaffold.fast(grid, keep_ratio=0.7, selection="topk", seed=0)
-    rounds = scaffold.fast(grid, keep_ratio=0.7, selection="rounds", seed=0)
-    assert topk.sparse_edges == rounds.sparse_edges
-    assert rounds.metadata["rounds"] >= 1
+def test_fast_is_only_the_one_pass_topk_variant(grid):
+    result = scaffold.fast(grid, keep_ratio=0.7, seed=0)
+    assert result.metadata["selection"] == "topk"
+    assert result.metadata["rounds"] == 1
+    with pytest.raises(ValueError, match="scaffold.batch"):
+        scaffold.fast(grid, keep_ratio=0.7, selection="rounds", seed=0)
+
+
+def test_batch_scores_only_sampled_candidates(grid):
+    result = scaffold.batch(
+        grid,
+        keep_ratio=0.7,
+        sample_size=12,
+        add_per_round=3,
+        seed=0,
+    )
+    initial_candidates = grid.num_edges - result.metadata["backbone_edges"]
+    assert result.metadata["method"] == "batch"
+    assert result.metadata["score_scope"] == "sampled_batch"
+    assert result.metadata["sampled_candidates"] == result.metadata["scored_candidates"]
+    assert result.metadata["scored_candidates"] < (
+        initial_candidates * result.metadata["rounds"]
+    )
+
+
+def test_batch_rejects_a_topk_that_commits_the_whole_sample(grid):
+    with pytest.raises(ValueError, match="smaller than sample_size"):
+        scaffold.batch(grid, keep_ratio=0.7, sample_size=8, add_per_round=8)
 
 
 def test_fast_topk_is_optimal_for_the_static_score(grid):
-    """``topk`` maximizes total score among all budget-feasible selections.
-
-    ``rounds`` samples, so it cannot beat a global top-k on the same scores.
-    """
-    topk = scaffold.fast(grid, keep_ratio=0.7, selection="topk", seed=0,
-                         return_scores=True)
-    rounds = scaffold.fast(grid, keep_ratio=0.7, selection="rounds", seed=0)
-    scores = np.nan_to_num(topk.metadata["scores"], posinf=1e12)
-    assert scores[topk.mask].sum() >= scores[rounds.mask].sum()
+    """Fast retains the highest static scores that fit after its backbone."""
+    result = scaffold.fast(
+        grid, keep_ratio=0.7, selection="topk", seed=0, return_scores=True
+    )
+    scores = np.nan_to_num(result.metadata["scores"], posinf=1e12)
+    # The public invariant is pinned directly by the selected-vs-dropped cut.
+    dropped = np.flatnonzero(~result.mask)
+    added = result.edge_ids[~build_backbone(grid, "fast-maxst")[result.edge_ids]]
+    if dropped.size and added.size:
+        assert scores[added].min() >= scores[dropped].max()
 
 
 def test_greedy_batch_size_reduces_rounds(small_grid):

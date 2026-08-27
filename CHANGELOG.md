@@ -18,9 +18,12 @@ First release. Private install from the GitHub repository; see
   insertion.
 - `scaffold.heap` — lazy greedy with a stale-score heap and local invalidation.
   Supports cluster-local heaps and both the max and p-norm score forms.
+- `scaffold.batch` — sampled per-cluster growth that computes dilation and
+  congestion within each candidate batch, then commits only the batch's top
+  edges against the current support graph.
 - `scaffold.fast` — the `O(m log n + n)` tree-prefix scorer (LCA + root-prefix
-  sums), with `selection="topk"` (default) and `selection="rounds"`
-  (paper Algorithm 1).
+  sums), followed by one global top-k. The sampled loop has the distinct
+  `scaffold.batch` identity.
 - `scaffold.sample` — ratio-independent per-edge weights plus systematic π-ps
   drawing, with exact budget and exact component preservation per draw;
   `fixed-randst` lets visual comparisons share a seeded random backbone.

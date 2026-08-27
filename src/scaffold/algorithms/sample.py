@@ -1,6 +1,6 @@
 r"""SCAFFOLD-Sample: score every edge once, then draw a fresh graph per epoch.
 
-The other three variants answer "which edges should I keep?". This one answers
+The other four variants answer "which edges should I keep?". This one answers
 "how important is each edge?" -- and hands you the weights.
 
 That difference matters for GNN training. Fixing one sparse graph for all

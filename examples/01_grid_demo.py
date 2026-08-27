@@ -12,7 +12,7 @@ structure. On Cora you cannot see that; here you can.
 Produces five figures:
 
 1. ``grid_backbones.png``  -- what each support backbone looks like
-2. ``grid_methods.png``    -- the four algorithms at the same budget
+2. ``grid_methods.png``    -- the five algorithms at the same budget
 3. ``grid_ratios.png``     -- SCAFFOLD-Fast as the budget tightens
 4. ``grid_scores.png``     -- SCAFFOLD-Sample's per-edge weights
 5. ``grid_coverage.png``   -- what per-epoch resampling covers over time
@@ -60,7 +60,7 @@ def figure_backbones(graph, positions, out_dir):
 
 
 def figure_methods(graph, positions, out_dir):
-    """The four algorithms at one budget. Red = the backbone they share."""
+    """The five algorithms at one budget. Red = the backbone they share."""
     fig, results = viz.compare_methods(
         graph,
         keep_ratio=KEEP_RATIO,

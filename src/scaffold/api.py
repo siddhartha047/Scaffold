@@ -1,7 +1,7 @@
-"""The public entry points: ``greedy``, ``heap``, ``fast``, ``sample``, ``sparsify``.
+"""The public entry points for all five SCAFFOLD algorithms.
 
-All five take any supported graph object, all five take the same budget
-arguments, and the first four return the same :class:`~scaffold.result.ScaffoldResult`.
+All five take any supported graph object and the same budget arguments.  The
+first four return the same :class:`~scaffold.result.ScaffoldResult`.
 Swapping one for another is a one-word change.
 """
 
@@ -11,6 +11,7 @@ from typing import Optional
 
 import numpy as np
 
+from .algorithms import batch as _batch
 from .algorithms import fast as _fast
 from .algorithms import greedy as _greedy
 from .algorithms import heap as _heap
@@ -21,7 +22,7 @@ from .result import ScaffoldResult, ScaffoldScores
 from .scoring import ScoreParams
 from .utils.validation import resolve_budget
 
-__all__ = ["greedy", "heap", "fast", "sample", "sparsify", "METHODS"]
+__all__ = ["greedy", "heap", "batch", "fast", "sample", "sparsify", "METHODS"]
 
 _SCORE_KEYS = ("alpha", "beta_edge", "beta_node", "edge_norm_p", "node_norm_q")
 
@@ -69,7 +70,7 @@ def _build_result(graph: Graph, method: str, mask, metadata) -> ScaffoldResult:
 
 
 # ----------------------------------------------------------------------
-# the four algorithms
+# the five algorithms
 # ----------------------------------------------------------------------
 def greedy(
     G,
@@ -151,6 +152,39 @@ def heap(
     return _build_result(graph, "heap", mask, metadata)
 
 
+def batch(
+    G,
+    keep_ratio: Optional[float] = None,
+    num_edges: Optional[int] = None,
+    backbone=DEFAULT_BACKBONE,
+    seed=None,
+    target_ratio: Optional[float] = None,
+    **kwargs,
+) -> ScaffoldResult:
+    """SCAFFOLD-Batch -- sampled batches with current-support scoring.
+
+    In every round, candidates are sampled per cluster; dilation plus edge and
+    node congestion are computed within each sampled batch against the current
+    support graph; and only the batch's top edges are committed.  This is the
+    original sampled-growth SCAFFOLD-Fast behavior, now given its own name.
+
+    It is slower than :func:`fast`, which scores the full candidate set once
+    with the LCA tree kernel, but Batch can react to earlier additions and its
+    sampling naturally spreads the retained edges.
+
+    Extra options: ``clusters``, ``cluster_method``, ``sample_size`` (default
+    64), and ``add_per_round`` (default 8).  Keep
+    ``add_per_round < sample_size`` so scoring affects the result.
+    """
+    keep_ratio = _resolve_keep_ratio(keep_ratio, target_ratio)
+    graph, params, kwargs = _prepare(G, kwargs)
+    mask, metadata = _batch.run(
+        graph, keep_ratio=keep_ratio, num_edges=num_edges,
+        backbone=backbone, params=params, seed=seed, **kwargs,
+    )
+    return _build_result(graph, "batch", mask, metadata)
+
+
 def fast(
     G,
     keep_ratio: Optional[float] = None,
@@ -166,8 +200,9 @@ def fast(
     root-prefix sums -- no shortest-path search anywhere -- then takes the top
     of the budget. **Use this one** unless you have a specific reason not to.
 
-    Extra options: ``selection`` (``"topk"`` or ``"rounds"``), ``clusters``,
-    ``sample_size``, ``add_per_round``, ``weighted_paths``, ``return_scores``.
+    Extra options: ``weighted_paths`` and ``return_scores``. ``selection`` is
+    retained only as a compatibility check and must be ``"topk"``; use
+    :func:`batch` for sampled-batch growth.
 
     Examples
     --------
@@ -196,7 +231,7 @@ def sample(
 ) -> ScaffoldScores:
     """SCAFFOLD-Sample -- per-edge weights for sampling, not a fixed subgraph.
 
-    Unlike the other three, this does **not** choose a subgraph. It scores
+    Unlike the other four, this does **not** choose a subgraph. It scores
     every edge once and returns those weights, so you can draw a fresh sparse
     view every training epoch at the cost of one uniform draw plus one
     ``searchsorted``.
@@ -292,6 +327,7 @@ class _BudgetBoundSampler:
 METHODS = {
     "greedy": greedy,
     "heap": heap,
+    "batch": batch,
     "fast": fast,
     "sample": sample,
 }
@@ -308,19 +344,20 @@ def sparsify(
 ):
     """Run any SCAFFOLD variant by name.
 
-    ``method`` is one of ``"greedy"``, ``"heap"``, ``"fast"`` (default) or
-    ``"sample"``. Leading ``"scaffold-"`` / ``"scaffold_"`` prefixes are
+    ``method`` is one of ``"greedy"``, ``"heap"``, ``"batch"``, ``"fast"``
+    (default) or ``"sample"``. Leading ``"scaffold-"`` / ``"scaffold_"`` prefixes are
     accepted, so config strings from the research code work unchanged.
 
     Examples
     --------
     >>> import scaffold
     >>> G = scaffold.grid_graph(6, 6)
-    >>> for name in ("greedy", "heap", "fast"):
+    >>> for name in ("greedy", "heap", "batch", "fast"):
     ...     r = scaffold.sparsify(G, method=name, keep_ratio=0.5)
     ...     print(name, r.sparse_edges)
     greedy 30
     heap 30
+    batch 30
     fast 30
     """
     keep_ratio = _resolve_keep_ratio(keep_ratio, target_ratio)

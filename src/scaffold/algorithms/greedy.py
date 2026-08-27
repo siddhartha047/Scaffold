@@ -3,7 +3,7 @@
 The literal definition of the method. Starting from the support backbone,
 every remaining edge is scored against the *current* support graph, the single
 best one is added, and the whole candidate set is rescored. Nothing is cached,
-sampled or approximated, so this is the ground truth the other three variants
+sampled or approximated, so this is the ground truth the other four variants
 are measured against.
 
 Cost is ``O(M * m * (n + m))`` for a budget of ``M`` edges -- fine for a few

@@ -22,12 +22,11 @@ undirected edge set. It defaults to `keep_ratio=0.6`, above Cora's connectivity
 floor, so the comparison exercises the LCA scores and top-k selection rather
 than merely comparing partial support forests.
 
-The research experiment config normally uses METIS partitions and
+The separate research `scaffold_batch` config uses METIS partitions and
 `tree_exact_loop`. That output is intentionally not expected to match the
-package default: partition-local budgeting and sampled-round selection define a
-different selection procedure. Use `selection="rounds"` in the package when
-you want the paper-style spreading behavior; use the default `"topk"` for the
-requested LCA score-once / skip-the-loop version.
+package Fast default: partition-local budgeting and sampled-batch selection
+define a different procedure. Use `scaffold.batch(...)` in the package for the
+sample-score-top-r loop; use `scaffold.fast(...)` for LCA score-once/top-k.
 
 Paths can be overridden when the repositories are not siblings:
 

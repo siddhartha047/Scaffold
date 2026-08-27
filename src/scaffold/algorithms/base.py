@@ -1,9 +1,9 @@
-"""Shared plumbing for the four SCAFFOLD algorithms.
+"""Shared plumbing for the five SCAFFOLD algorithms.
 
 Each algorithm's ``run`` receives a normalized :class:`~scaffold.graph.Graph`
 and returns a boolean mask over its canonical edges plus a metadata dict. The
 budget arithmetic, backbone construction and mandatory-edge handling are done
-once here so the four variants cannot drift apart on the parts that should be
+once here so the five variants cannot drift apart on the parts that should be
 identical.
 """
 

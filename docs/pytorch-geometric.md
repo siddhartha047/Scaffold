@@ -37,6 +37,20 @@ from scaffold.pyg import sparsify_data
 sparse = sparsify_data(data, method="fast", keep_ratio=0.6, seed=0)
 ```
 
+Use the original sampled-batch growth path by changing only the method and its
+batch controls:
+
+```python
+sparse = sparsify_data(
+    data,
+    method="batch",
+    keep_ratio=0.6,
+    seed=0,
+    sample_size=64,
+    add_per_round=8,
+)
+```
+
 ### Conventions
 
 - Input `edge_index` is canonicalized: self loops dropped, `(u,v)` and `(v,u)`

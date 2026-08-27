@@ -1,4 +1,4 @@
-# The SCAFFOLD objective, and four ways to evaluate it
+# The SCAFFOLD objective, and five ways to evaluate it
 
 ## The idea
 
@@ -62,7 +62,7 @@ every nearby candidate — do it all again after each insertion.
 For a budget of `M` edges that is `O(M · m · (n + m))`. On Cora (2,708 nodes,
 5,278 edges) it takes minutes. On anything larger it is hopeless.
 
-The four variants are four answers to that problem.
+The five variants are five answers to that problem.
 
 ---
 
@@ -82,7 +82,7 @@ a different algorithm.
 `batch_size` commits several edges per rescoring round, trading fidelity for a
 proportional speed-up — the expensive part is the rescoring, not the insertion.
 
-**Use it for:** validating the other three, toy graphs, figures.
+**Use it for:** validating the other four, toy graphs, figures.
 
 ---
 
@@ -124,6 +124,31 @@ Pass `score_form="product"` for the shared `p`-norm objective if you want
 Heap and Greedy to be optimizing literally the same thing.
 
 **Use it for:** mid-sized graphs where you want to stay close to Greedy.
+
+---
+
+## `scaffold.batch` — sampled candidates, current-support scores
+
+This is the original sampled-growth implementation that was previously called
+SCAFFOLD-Fast. In each round and cluster it draws `sample_size` candidates,
+computes dilation plus edge and node congestion within that sampled batch
+against the current support graph, and adds only the best `add_per_round`.
+
+```python
+result = scaffold.batch(G, keep_ratio=0.2,
+                        sample_size=64,
+                        add_per_round=8,
+                        clusters=None)
+```
+
+The next round sees the edges just added, so its paths and scores can change.
+That makes Batch more adaptive and more spatially spread than one global top-k,
+but repeated shortest-path searches make it slower than the LCA-based Fast
+variant. Keep `add_per_round < sample_size`; otherwise every sampled edge is
+committed and the score has no influence.
+
+**Use it for:** reproducing the original sampled-batch algorithm or when
+selection spread and current-support rescoring matter more than raw speed.
 
 ---
 
@@ -173,24 +198,19 @@ weighted and unweighted graphs, and disconnected inputs, to `rtol=1e-9`.
 
 ### Selection
 
-Because growth never rebuilds the tree index, **the score is static**. The
-sampled round loop was only ever approximating a ranking that can be taken
-exactly in one pass.
+Because growth never rebuilds the tree index, **the score is static**. Fast
+therefore has exactly one selection rule: take the global top-`M`. The older
+sampled loop is `scaffold.batch`, where each batch is rescored against the
+current support before its top-r edges are added.
 
 ```python
-scaffold.fast(G, keep_ratio=0.2, selection="topk")    # default
-scaffold.fast(G, keep_ratio=0.2, selection="rounds")  # paper Algorithm 1
+scaffold.fast(G, keep_ratio=0.2)   # one tree-prefix pass, then global top-k
+scaffold.batch(G, keep_ratio=0.2)  # sampled batch, score, top-r, repeat
 ```
 
-- **`"topk"`** — one global top-`M` over the static scores. Mandatory edges
-  carry `+∞` and sort first, which is the priority connectivity demands.
-- **`"rounds"`** — per-cluster degree-weighted sampling, top-`r` per cluster per
-  round, degrees updated as edges land. Produces a more spatially spread
-  selection at equal budget. It cannot beat `topk` on the objective it is
-  ranking by (both read the same scores), but on a highly symmetric graph the
-  spread can matter: with large blocks of exactly-tied scores, `topk` resolves
-  the tie by edge id, which clusters its picks. The grid demo shows this
-  clearly.
+Mandatory edges carry `+∞` and sort first, which is the priority connectivity
+demands. On highly symmetric graphs, top-k's edge-id tie break can concentrate
+selection; Batch is the adaptive, spatially spread alternative.
 
 ### Reusing one pass across budgets
 
@@ -205,7 +225,7 @@ scores = result.metadata["scores"]     # one array, every budget
 
 ## `scaffold.sample` — weights, not a subgraph
 
-The other three answer "which edges should I keep?". This one answers "how
+The other four answer "which edges should I keep?". This one answers "how
 important is each edge?" and hands you the numbers.
 
 That difference matters for GNN training. Fixing one sparse graph for all epochs
@@ -283,6 +303,7 @@ Do you want one fixed graph, or a fresh one per epoch?
 └── one fixed graph
     │
     ├── m > ~10^5 edges ─────────────────────► scaffold.fast
+    ├── sampled, adaptive growth ─────────────► scaffold.batch
     ├── m < ~10^5 and you want max fidelity ─► scaffold.heap
     └── validating / a figure / a toy graph ─► scaffold.greedy
 ```
@@ -295,6 +316,7 @@ For `n` nodes, `m` edges, budget `M`, heap width `k`, forest count `R`:
 |---|---|---|---|
 | `greedy` | `O(m(n+m))` per round | argmax | `O(M·m·(n+m))` |
 | `heap`  | `O(k(n+m))` per round | heap pop | `~O(M·k·(n+m))` |
+| `batch` | batch-sized shortest-path scoring per round | sampled top-r | depends on batch and round counts |
 | `fast`  | `O(m log n + n)` **once** | one top-k | `O(m log n + n)` |
 | `sample` | `O(R·(m log n + n))` **once** | `O(m)` per draw | precompute + `O(m)`/epoch |
 
@@ -313,22 +335,18 @@ both. Single-threaded, numba enabled, `scaffold` 0.1.0.
 | grid 24×24 | 576 | 1104 | 0.64 | `greedy` | 1,640 | 3.83 | 3.9 |
 | | | | | `heap` | 442 | 3.79 | 5.7 |
 | | | | | `fast (topk)` | **0.4** | 12.06 | 26.3 |
-| | | | | `fast (rounds)` | 2.6 | 10.97 | 25.9 |
 | | | | | `sample` | 3.7 | **3.73** | 5.1 |
 | geometric | 600 | 2932 | 0.32 | `greedy` | 9,235 | 2.40 | 14.6 |
 | | | | | `heap` | 1,268 | **2.30** | 17.5 |
 | | | | | `fast (topk)` | **0.8** | 2.68 | 42.0 |
-| | | | | `fast (rounds)` | 8.0 | 2.47 | 29.0 |
 | | | | | `sample` | 6.4 | 2.68 | **23.2** |
 | Barabási–Albert | 600 | 1791 | 0.45 | `greedy` | 3,004 | 3.66 | **36.9** |
 | | | | | `heap` | 591 | **3.63** | 141.7 |
 | | | | | `fast (topk)` | **0.6** | 3.82 | 107.1 |
-| | | | | `fast (rounds)` | 4.4 | 3.77 | 120.2 |
 | | | | | `sample` | 4.8 | 3.89 | 177.9 |
 | SBM (4 blocks) | 600 | 3262 | 0.30 | `greedy` | 16,354 | **5.13** | **37.1** |
 | | | | | `heap` | 1,578 | 5.19 | 78.1 |
 | | | | | `fast (topk)` | **0.8** | 6.92 | 697.1 |
-| | | | | `fast (rounds)` | 9.2 | 5.61 | 141.8 |
 | | | | | `sample` | 7.1 | 5.30 | 82.3 |
 
 Reproduce with `python benchmarks/bench_methods.py`.
@@ -341,8 +359,9 @@ That is the trade the method is designed to make.
 
 **Its weakness is congestion, not dilation.** Because the score is static and
 never sees the edges already added, `topk` concentrates its picks — worst on
-SBM, where max congestion is 697 against Greedy's 37. `selection="rounds"` cuts
-that to 142 for about 10× the time, and `sample` to 82.
+SBM, where max congestion is 697 against Greedy's 37. Use Batch when you want
+current-support rescoring and sampled spatial spread, or Sample for per-epoch
+views.
 
 **The grid is the pathological case, deliberately.** A lattice produces large
 blocks of exactly-tied scores, so `topk` fills a few neighbourhoods and leaves

@@ -13,12 +13,13 @@ The distribution is `scaffold-sparse`; the canonical import name is `scaffold`.
 
 ### `scaffold.sparsify(G, method="fast", keep_ratio=None, num_edges=None, seed=None, target_ratio=None, **kwargs)`
 
-Run any variant by name. `method` is `"greedy"`, `"heap"`, `"fast"` or
-`"sample"`; a leading `"scaffold-"` / `"scaffold_"` is accepted, so config
+Run any variant by name. `method` is `"greedy"`, `"heap"`, `"batch"`,
+`"fast"` or `"sample"`; a leading `"scaffold-"` / `"scaffold_"` is accepted, so config
 strings work unchanged.
 
 ### `scaffold.greedy(G, keep_ratio=None, num_edges=None, backbone="fast-maxst", seed=None, target_ratio=None, **kwargs)`
 ### `scaffold.heap(G, ...)`
+### `scaffold.batch(G, ...)`
 ### `scaffold.fast(G, ...)`
 
 Return a [`ScaffoldResult`](#scaffoldresult).
@@ -87,15 +88,24 @@ overrides win over it.
 | `dirty_limit` | `64` | cap on invalidations per round; `0` = unlimited |
 | `score_form` | `"max"` | `"max"` or `"product"` — see [algorithms.md](algorithms.md) |
 
+### `scaffold.batch` extras
+
+| argument | default | meaning |
+|---|---:|---|
+| `clusters` | `None` | Auto count, an integer count, or per-node labels |
+| `cluster_method` | `"bfs"` | `"bfs"`, `"metis"` (needs `pymetis`), or `"random"` |
+| `sample_size` | `64` | Candidates drawn and scored per cluster per round |
+| `add_per_round` | `8` | Top candidates committed per cluster; must be smaller than `sample_size` |
+
+Batch recomputes shortest-path dilation and congestion within each sampled
+batch against the current support graph. It is the original sampled-growth
+Fast implementation, now separated from the one-pass LCA method.
+
 ### `scaffold.fast` extras
 
 | argument | default | meaning |
 |---|---|---|
-| `selection` | `"topk"` | `"topk"` (one global top-k) or `"rounds"` (paper Algorithm 1) |
-| `clusters` | `None` | `"rounds"` only |
-| `cluster_method` | `"bfs"` | `"rounds"` only |
-| `sample_size` | `64` | `"rounds"` only: candidates drawn per cluster per round |
-| `add_per_round` | `8` | `"rounds"` only: edges committed per cluster per round |
+| `selection` | `"topk"` | Compatibility check; only `"topk"` is accepted. Use `scaffold.batch` for sampled top-r. |
 | `weighted_paths` | `False` | measure detour length as a sum of tree edge weights instead of hops |
 | `return_scores` | `False` | put the per-edge score array in `metadata["scores"]` |
 
@@ -114,7 +124,7 @@ overrides win over it.
 
 ## `ScaffoldResult`
 
-Returned by `greedy`, `heap`, `fast`, and by `ScaffoldScores.draw()`.
+Returned by `greedy`, `heap`, `batch`, `fast`, and by `ScaffoldScores.draw()`.
 
 ### Counting convention
 
@@ -135,7 +145,7 @@ Returned by `greedy`, `heap`, `fast`, and by `ScaffoldScores.draw()`.
 | `.edge_weight` | `(2k,)` or `None` |
 | `.num_nodes` | node count (unchanged by sparsification) |
 | `.original_edges`, `.sparse_edges`, `.keep_ratio` | undirected counts |
-| `.method` | `"greedy"` / `"heap"` / `"fast"` / `"sample"` |
+| `.method` | `"greedy"` / `"heap"` / `"batch"` / `"fast"` / `"sample"` |
 | `.metadata` | dict; see below |
 
 ### Methods
@@ -158,7 +168,7 @@ Always present: `method`, `num_nodes`, `original_edges`, `sparse_edges`,
 `beta_edge`, `beta_node`,
 `base_components`, `delta_min`, `below_connectivity_floor`.
 
-For `greedy`, `heap`, and `fast`, `budget_trimmed` is the number of edges
+For `greedy`, `heap`, `batch`, and `fast`, `budget_trimmed` is the number of edges
 randomly removed from the complete support forest when the target lies below
 the connectivity floor. The trim is reproducible with `seed=`. A concrete
 `sample` draw reports the same situation through `forced_edges`,
@@ -167,6 +177,8 @@ successive draws re-trim the complete forest.
 
 Per method: `greedy` adds `rounds`, `scored_candidates`, `batch_size`; `heap`
 adds `rescored_candidates`, `heap_rebuilds`, `top_k`, `clusters`, `score_form`;
+`batch` adds `rounds`, `sampled_candidates`, `scored_candidates`, `sample_size`,
+`add_per_round`, and `score_scope="sampled_batch"`;
 `fast` adds `selection`, `mandatory_edges`, `total_stretch` (and `scores`,
 `dilation`, `edge_congestion_path`, `node_congestion_path` with
 `return_scores=True`).

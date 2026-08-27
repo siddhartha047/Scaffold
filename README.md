@@ -32,21 +32,23 @@ matrix, or a plain `(2, m)` `edge_index` array.
 
 ---
 
-## The four algorithms
+## The five algorithms
 
-All four take the same arguments and (except `sample`) return the same object,
+All five take the same arguments and (except `sample`) return the same object,
 so comparing them is a one-word change.
 
 | | what it does | cost | use it when |
 |---|---|---|---|
 | `scaffold.greedy` | Reference greedy. Rescores every candidate after every insertion. | `O(M·m·(n+m))` | Validating; small graphs; you want the ground truth. |
 | `scaffold.heap` | Lazy greedy. Stale scores in a heap; rescores only what an insertion actually changed. | ~`O(M·k·(n+m))` | Mid-sized graphs where you want to stay close to Greedy. |
+| `scaffold.batch` | Samples a candidate batch, computes dilation and congestion within it, then adds the batch's top edges. | repeated batch-sized shortest-path passes | The original sampled-growth behavior; spatial spread with current-support rescoring. |
 | **`scaffold.fast`** | **Scores every candidate exactly in one tree-prefix pass. No path search anywhere.** | **`O(m log n + n)`** | **Default. Real graphs.** |
 | `scaffold.sample` | Returns per-edge *weights*, not a subgraph. Draw a fresh graph every epoch. | precompute once, then `O(m)` per draw | GNN training with per-epoch resparsification. |
 
 ```python
 result = scaffold.greedy(G, keep_ratio=0.2)
 result = scaffold.heap(G,   keep_ratio=0.2)
+result = scaffold.batch(G,  keep_ratio=0.2)
 result = scaffold.fast(G,   keep_ratio=0.2)
 scores = scaffold.sample(G)
 
@@ -78,7 +80,7 @@ The trade that buys: on a random geometric graph (600 nodes, 2,932 edges),
 `greedy` takes 9,235 ms and `fast` 0.8 ms — 11,000× — for a mean dilation of
 2.68 against Greedy's 2.40. Where `fast` does pay is *congestion*: a static
 score cannot see the edges already added, so it concentrates its picks.
-`selection="rounds"` and `scaffold.sample` both spread them out.
+`scaffold.batch` and `scaffold.sample` spread them out.
 [`docs/algorithms.md`](https://github.com/siddhartha047/Scaffold/blob/main/docs/algorithms.md) has the measured numbers across four
 graph families, including the case where `fast` looks bad.
 
@@ -94,11 +96,11 @@ is equivalent by symmetry. So whatever survives sparsification is the
 python examples/01_grid_demo.py --out docs/images
 ```
 
-**The four methods at the same budget.** Pale red is a shared seeded `randst`
+**The five methods at the same budget.** Pale red is a shared seeded `randst`
 backbone (free — it is what guarantees connectivity); bold blue is what each
 method chose to buy with the rest of the budget.
 
-![the four methods on a grid](docs/images/grid_methods.png)
+![the five methods on a grid](docs/images/grid_methods.png)
 
 **`scaffold.sample` returns weights, not a subgraph.** Left: the
 ratio-independent weight `π` for every edge. Middle: inclusion probabilities at
@@ -131,6 +133,11 @@ import scaffold
 
 G = nx.karate_club_graph()
 result = scaffold.fast(G, keep_ratio=0.5, seed=0)
+
+# Original sampled-batch growth instead of one-pass Fast:
+batch_result = scaffold.batch(
+    G, keep_ratio=0.5, sample_size=64, add_per_round=8, seed=0
+)
 
 H = result.to_networkx()          # original node labels preserved
 print(nx.is_connected(H))         # True
@@ -191,6 +198,18 @@ from scaffold.pyg import ScaffoldTransform
 dataset = Planetoid(
     root="/tmp/Cora", name="Cora",
     transform=ScaffoldTransform(method="fast", keep_ratio=0.6),
+)
+```
+
+The same transform accepts Batch without any adapter changes:
+
+```python
+ScaffoldTransform(
+    method="batch",
+    keep_ratio=0.6,
+    seed=0,
+    sample_size=64,
+    add_per_round=8,
 )
 ```
 
@@ -261,7 +280,7 @@ result.metadata["below_connectivity_floor"]    # True
 result.num_components()                        # > 1, necessarily
 ```
 
-In that below-floor case, all four variants first construct their complete
+In that below-floor case, all five variants first construct their complete
 support forest and then randomly drop forest edges until the exact requested
 budget is reached. Pass `seed=` to make that trim reproducible. This avoids
 favoring the prefix of a backbone's deterministic edge order. Each

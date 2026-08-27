@@ -1,6 +1,6 @@
 """The object every SCAFFOLD entry point returns.
 
-One result type for all four algorithms, so swapping ``scaffold.fast`` for
+One result type for all five algorithms, so swapping ``scaffold.fast`` for
 ``scaffold.heap`` is a one-word change. Conversions live here rather than
 happening implicitly, because on a graph with hundreds of millions of edges a
 hidden ``to_networkx()`` is not a detail.
