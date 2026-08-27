@@ -41,9 +41,19 @@ so comparing them is a one-word change.
 |---|---|---|---|
 | `scaffold.greedy` | Reference greedy. Rescores every candidate after every insertion. | `O(M·m·(n+m))` | Validating; small graphs; you want the ground truth. |
 | `scaffold.heap` | Lazy greedy. Stale scores in a heap; rescores only what an insertion actually changed. | ~`O(M·k·(n+m))` | Mid-sized graphs where you want to stay close to Greedy. |
-| `scaffold.batch` | Samples a candidate batch, computes dilation and congestion within it, then adds the batch's top edges. | repeated batch-sized shortest-path passes | The original sampled-growth behavior; spatial spread with current-support rescoring. |
+| `scaffold.batch` | Samples a candidate batch, computes dilation and congestion within it, then adds the batch's top edges. | `O(ceil(A/r) [m + s(n+h) + s log s])` unweighted; definitions below | The original sampled-growth behavior; spatial spread with current-support rescoring. |
 | **`scaffold.fast`** | **Scores every candidate exactly in one tree-prefix pass. No path search anywhere.** | **`O(m log n + n)`** | **Default. Real graphs.** |
 | `scaffold.sample` | Returns per-edge *weights*, not a subgraph. Draw a fresh graph every epoch. | precompute once, then `O(m)` per draw | GNN training with per-epoch resparsification. |
+
+For the Batch bound, `s = sample_size`, `r = add_per_round`, `A` is the
+number of edges added after the backbone, and `h` is the number of edges in
+the current support graph (`h <= m`). Assuming a full batch contributes `r`
+edges, Batch evaluates about `ceil(A/r)` batches. Each unweighted batch scans
+its candidate pool in `O(m)`, runs at most `s` BFS searches in `O(s(n+h))`,
+and ranks the sample in `O(s log s)`. Thus the simpler worst-case bound is
+`O(ceil(A/r) s(n+m))`. For weighted paths, replace the BFS term with
+`O(s(n+h) log n)` for Dijkstra. Candidates sharing a source reuse one search,
+so the observed cost can be lower.
 
 ```python
 result = scaffold.greedy(G, keep_ratio=0.2)
