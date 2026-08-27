@@ -1,12 +1,13 @@
 """SCAFFOLD -- dilation- and congestion-aware graph sparsification.
 
-Four algorithms behind one API::
+Five algorithms behind one API::
 
     import scaffold
 
     result = scaffold.fast(G, keep_ratio=0.2)    # recommended default
     result = scaffold.greedy(G, keep_ratio=0.2)  # reference greedy
     result = scaffold.heap(G, keep_ratio=0.2)    # lazy greedy
+    result = scaffold.batch(G, keep_ratio=0.2)   # sampled-batch growth
     scores = scaffold.sample(G)                  # per-edge weights, not a subgraph
 
     result = scaffold.sparsify(G, method="fast", keep_ratio=0.2)
@@ -24,7 +25,7 @@ demonstrations, including a visual grid-graph walkthrough.
 """
 
 from ._version import __version__
-from .api import METHODS, fast, greedy, heap, sample, sparsify
+from .api import METHODS, batch, fast, greedy, heap, sample, sparsify
 from .backbone import available_backbones, register_backbone
 from .datasets import grid_graph, grid_positions, random_geometric, ring_of_cliques
 from .graph import Graph, normalize_graph
@@ -36,6 +37,7 @@ __all__ = [
     "sparsify",
     "greedy",
     "heap",
+    "batch",
     "fast",
     "sample",
     "METHODS",

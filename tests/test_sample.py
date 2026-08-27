@@ -195,7 +195,7 @@ def test_fixed_randst_matches_public_backbone(grid):
     np.testing.assert_array_equal(scores.backbone, expected)
 
 
-def test_four_method_visual_can_share_randst(grid):
+def test_five_method_visual_can_share_randst(grid):
     plt = pytest.importorskip("matplotlib.pyplot")
 
     backbone = build_backbone(grid, "randst", seed=7)

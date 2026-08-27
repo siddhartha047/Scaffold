@@ -79,7 +79,8 @@ class ScaffoldTransform:
     Parameters
     ----------
     method:
-        ``"greedy"``, ``"heap"``, ``"fast"`` (default) or ``"sample"``.
+        ``"greedy"``, ``"heap"``, ``"batch"``, ``"fast"`` (default), or
+        ``"sample"``.
     keep_ratio, num_edges:
         Edge budget; exactly one.
     seed:

@@ -98,13 +98,13 @@ print(f"  mask:          {result.mask.astype(int).tolist()}")
 
 
 # ----------------------------------------------------------------------
-section("6. Comparing the four methods")
+section("6. Comparing the five methods")
 # ----------------------------------------------------------------------
 G = scaffold.grid_graph(16, 16)
 print(f"  {G}\n")
 print(f"  {'method':8s} {'edges':>7s} {'comp':>5s} {'ms':>8s}   notes")
 print(f"  {'-' * 8} {'-' * 7} {'-' * 5} {'-' * 8}   {'-' * 30}")
-for method in ("greedy", "heap", "fast", "sample"):
+for method in ("greedy", "heap", "batch", "fast", "sample"):
     result = scaffold.sparsify(G, method=method, keep_ratio=0.7, seed=0)
     note = ""
     if method == "sample":

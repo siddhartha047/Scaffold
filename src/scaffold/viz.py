@@ -153,7 +153,7 @@ def draw_result(result: ScaffoldResult, ax=None, positions=None, title=None, **k
 def compare_methods(
     graph: Graph,
     keep_ratio: float = 0.5,
-    methods: Sequence[str] = ("greedy", "heap", "fast", "sample"),
+    methods: Sequence[str] = ("greedy", "heap", "batch", "fast", "sample"),
     positions=None,
     seed=0,
     backbone=None,
@@ -208,7 +208,7 @@ def compare_methods(
             }
             if backbone_name not in sample_backbones:
                 raise ValueError(
-                    "the four-method comparison can share only a fast-maxst "
+                    "the method comparison can share only a fast-maxst "
                     "or randst backbone with scaffold.sample"
                 )
             result = sparsify(

@@ -31,8 +31,8 @@ requires_matplotlib = pytest.mark.skipif(
     not _importable("matplotlib"), reason="matplotlib not installed"
 )
 
-ALL_METHODS = ("greedy", "heap", "fast", "sample")
-GREEDY_METHODS = ("greedy", "heap", "fast")
+ALL_METHODS = ("greedy", "heap", "batch", "fast", "sample")
+GREEDY_METHODS = ("greedy", "heap", "batch", "fast")
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-"""Runtime and quality comparison of the four SCAFFOLD variants.
+"""Runtime and quality comparison of the five SCAFFOLD variants.
 
 Run::
 
@@ -31,7 +31,7 @@ import scaffold
 from scaffold.kernels import HAVE_NUMBA
 from scaffold.scoring import ScoreParams, path_scores
 
-METHODS = ("greedy", "heap", "fast", "sample")
+METHODS = ("greedy", "heap", "batch", "fast", "sample")
 
 
 def measure_quality(graph, mask):

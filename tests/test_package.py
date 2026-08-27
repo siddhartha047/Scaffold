@@ -38,9 +38,9 @@ def test_everything_in_all_exists(name):
 
 
 def test_entry_points_are_callable():
-    for name in ("sparsify", "greedy", "heap", "fast", "sample"):
+    for name in ("sparsify", "greedy", "heap", "batch", "fast", "sample"):
         assert callable(getattr(scaffold, name))
-    assert set(scaffold.METHODS) == {"greedy", "heap", "fast", "sample"}
+    assert set(scaffold.METHODS) == {"greedy", "heap", "batch", "fast", "sample"}
 
 
 def test_unknown_attribute_raises_attribute_error():
@@ -121,6 +121,6 @@ def test_validation_scripts_are_syntactically_valid():
 
 
 def test_public_functions_have_docstrings():
-    for name in ("sparsify", "greedy", "heap", "fast", "sample"):
+    for name in ("sparsify", "greedy", "heap", "batch", "fast", "sample"):
         doc = getattr(scaffold, name).__doc__
         assert doc and len(doc.strip()) > 40, f"{name} needs a real docstring"

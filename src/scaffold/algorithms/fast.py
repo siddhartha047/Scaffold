@@ -20,20 +20,10 @@ Total: ``O(m log n + n)``, with no path ever enumerated. The scores are
 *identical* to what SCAFFOLD-Greedy computes in its first round -- the support
 is the tree, so ``d_H == d_T``.
 
-Selection
----------
-
-``selection="topk"`` (default) is the "skip the loop" version: because the tree
-index is never rebuilt during growth, the score is **static**, so the sampled
-round loop was only ever approximating a ranking that can be taken exactly in
-one pass. Mandatory (cross-component) edges carry ``+inf`` and are therefore
-taken first, which is exactly the priority connectivity demands.
-
-``selection="rounds"`` reproduces Algorithm 1 literally: per-cluster
-degree-weighted sampling, top-``r`` per cluster per round, degrees updated as
-edges land. It cannot beat ``topk`` on the static score -- both read the same
-numbers -- but the selection it produces is spatially spread rather than
-concentrated, and that matters more than the ranking does.
+Selection is one global top-k. Because the tree index is never rebuilt during
+growth, the score is static; the sampled round loop that preceded this version
+now lives under :func:`scaffold.batch`, where scores are recomputed within each
+sampled batch against the current support.
 
 Why spreading matters
 ---------------------
@@ -53,13 +43,13 @@ variant              time (ms)  mean dil.   max congest.
 ===================  =========  ==========  ===========
 ``greedy``             1674         3.83         3.87
 ``topk``                  0.5      12.06        26.34
-``rounds``                2.7      10.97        25.94
 ===================  =========  ==========  ===========
 
 On less symmetric graphs the gap mostly closes -- on a random geometric graph
 ``topk`` gets 2.68 against ``greedy``'s 2.40, and on Barabasi-Albert 3.82 against
-3.66 -- so ``topk`` remains the default. Congestion is the term that suffers
-most from concentration; if that is what you care about, use ``rounds``, or use
+3.66. Congestion is the term that suffers most from concentration; if that is
+what you care about, use
+:func:`scaffold.batch` or
 :mod:`~scaffold.algorithms.sample`, whose tree-locality ordering spreads by
 construction.
 """
@@ -68,14 +58,11 @@ from __future__ import annotations
 
 from typing import Optional
 
-import numpy as np
-
 from ..backbone import DEFAULT_BACKBONE
-from ..clustering import assign_clusters, cluster_edges
 from ..graph import Graph
 from ..kernels import build_tree_index
 from ..scoring import ScoreParams, tree_scores
-from .base import GrowthContext, degree_weighted_sample, selected_degrees, take_top
+from .base import GrowthContext, take_top
 
 
 def run(
@@ -86,10 +73,6 @@ def run(
     params: Optional[ScoreParams] = None,
     seed=None,
     selection: str = "topk",
-    clusters=None,
-    cluster_method: str = "bfs",
-    sample_size: int = 64,
-    add_per_round: int = 8,
     weighted_paths: bool = False,
     backbone_options=None,
     return_scores: bool = False,
@@ -100,17 +83,8 @@ def run(
     Parameters
     ----------
     selection:
-        ``"topk"`` -- one global top-k over the static scores (default).
-        ``"rounds"`` -- the per-cluster sampled round loop of Algorithm 1.
-    clusters, cluster_method, sample_size, add_per_round:
-        Only used by ``selection="rounds"``. ``sample_size`` (``s``) candidates
-        are drawn per cluster per round and the best ``add_per_round`` (``r``)
-        of them are committed.
-
-        **Keep ``r < s``.** With ``r >= s`` the top-r step commits the entire
-        sample, so the score stops influencing the selection at all and the
-        result is degree-weighted random sampling over the backbone. That is a
-        legitimate baseline, but it is not this algorithm.
+        Compatibility check; must be ``"topk"``. Use :func:`scaffold.batch`
+        for sampled-batch top-r growth.
     weighted_paths:
         Measure the numerator of the dilation as a sum of tree edge weights
         rather than as a hop count. Only meaningful on weighted graphs.
@@ -128,8 +102,11 @@ def run(
         seed=seed,
         backbone_options=backbone_options,
     )
-    if selection not in ("topk", "rounds"):
-        raise ValueError("selection must be 'topk' or 'rounds'")
+    if selection != "topk":
+        raise ValueError(
+            "scaffold.fast supports only selection='topk'; use "
+            "scaffold.batch for sampled-batch growth"
+        )
 
     if graph.num_edges == 0 or ctx.remaining_budget <= 0:
         return ctx.finish("fast", selection=selection, rounds=0, scored_candidates=0)
@@ -152,23 +129,10 @@ def run(
     scores = scored["score"]
     candidates = ctx.candidate_ids()
 
-    if selection == "topk":
-        chosen = take_top(scores, candidates, ctx.remaining_budget)
-        ctx.add(chosen)
-        rounds = 1
-        scored_total = int(candidates.size)
-    else:
-        rounds, scored_total = _grow_in_rounds(
-            ctx,
-            graph,
-            scores,
-            clusters=clusters,
-            cluster_method=cluster_method,
-            sample_size=sample_size,
-            add_per_round=add_per_round,
-            seed=seed,
-            verbose=verbose,
-        )
+    chosen = take_top(scores, candidates, ctx.remaining_budget)
+    ctx.add(chosen)
+    rounds = 1
+    scored_total = int(candidates.size)
 
     extra = {
         "selection": selection,
@@ -190,60 +154,6 @@ def run(
             f"edges={ctx.selected}/{ctx.target_edges}"
         )
     return ctx.finish("fast", **extra)
-
-
-def _grow_in_rounds(
-    ctx: GrowthContext,
-    graph: Graph,
-    scores: np.ndarray,
-    clusters,
-    cluster_method: str,
-    sample_size: int,
-    add_per_round: int,
-    seed,
-    verbose: bool,
-):
-    """Algorithm 1's loop: sample per cluster, take top-r, repeat."""
-    node_labels = assign_clusters(graph, clusters, method=cluster_method, seed=seed)
-    edge_cluster = cluster_edges(graph, node_labels)
-    cluster_ids = np.unique(edge_cluster)
-    degree = selected_degrees(graph.num_nodes, graph.src, graph.dst, ctx.mask)
-    sample_size = max(1, int(sample_size))
-    add_per_round = max(1, int(add_per_round))
-
-    rounds = 0
-    scored_total = 0
-    while ctx.remaining_budget > 0:
-        rounds += 1
-        rng = np.random.default_rng(
-            None if seed is None else np.random.SeedSequence([int(seed), rounds])
-        )
-        proposals = []
-        for cid in cluster_ids:
-            pool = np.flatnonzero((edge_cluster == cid) & ~ctx.mask)
-            if pool.size == 0:
-                continue
-            batch = degree_weighted_sample(
-                pool, graph.src, graph.dst, degree, sample_size, rng
-            )
-            scored_total += int(batch.size)
-            proposals.append(take_top(scores, batch, add_per_round))
-        if not proposals:
-            break
-
-        merged = np.concatenate(proposals)
-        chosen = take_top(scores, merged, ctx.remaining_budget)
-        added = ctx.add(chosen)
-        if added == 0:
-            break
-        np.add.at(degree, graph.src[chosen], 1)
-        np.add.at(degree, graph.dst[chosen], 1)
-        if verbose:
-            print(
-                f"[scaffold.fast] round={rounds} added={added} "
-                f"edges={ctx.selected}/{ctx.target_edges}"
-            )
-    return rounds, scored_total
 
 
 __all__ = ["run"]

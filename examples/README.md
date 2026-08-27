@@ -29,7 +29,7 @@ that; here you can.
 | file | shows |
 |---|---|
 | `grid_backbones.png` | the spanning forest each backbone produces |
-| `grid_methods.png` | the four algorithms at one budget |
+| `grid_methods.png` | the five algorithms at one budget |
 | `grid_ratios.png` | `scaffold.fast` as the budget tightens past the connectivity floor |
 | `grid_scores.png` | `scaffold.sample`'s weights, inclusion probabilities, and one draw |
 | `grid_coverage.png` | what per-epoch resampling covers over 50 epochs |

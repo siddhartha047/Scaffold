@@ -1,6 +1,6 @@
 """Argument validation and budget arithmetic.
 
-The edge budget is resolved in exactly one place so that all four algorithms
+The edge budget is resolved in exactly one place so that all five algorithms
 agree on what ``keep_ratio=0.2`` means, down to the rounding.
 """
 
