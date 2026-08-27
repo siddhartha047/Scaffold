@@ -66,13 +66,13 @@ The four variants are four answers to that problem.
 
 ---
 
-## `scaffold.exact` — the reference
+## `scaffold.greedy` — the reference
 
 Does exactly what the definition says. One shortest-path search per distinct
 source, full rescoring after every insertion, no caching or sampling.
 
 ```python
-result = scaffold.exact(G, keep_ratio=0.2, batch_size=1)
+result = scaffold.greedy(G, keep_ratio=0.2, batch_size=1)
 ```
 
 Rescoring is the point, not an inefficiency: once an edge lands, nearby
@@ -88,7 +88,7 @@ proportional speed-up — the expensive part is the rescoring, not the insertion
 
 ## `scaffold.heap` — lazy greedy
 
-Almost all of Exact's work is wasted. Adding one edge changes the detours of
+Almost all of Greedy's work is wasted. Adding one edge changes the detours of
 candidates routed *near* it and leaves the rest of the graph untouched.
 
 So: keep scores in a max-heap and let them go stale. Each round, pop the top
@@ -121,9 +121,9 @@ fresh one. The max form has no global normalizer, so stale keys stay meaningful,
 which is the entire premise of the lazy heap.
 
 Pass `score_form="product"` for the shared `p`-norm objective if you want
-Heap and Exact to be optimizing literally the same thing.
+Heap and Greedy to be optimizing literally the same thing.
 
-**Use it for:** mid-sized graphs where you want to stay close to Exact.
+**Use it for:** mid-sized graphs where you want to stay close to Greedy.
 
 ---
 
@@ -165,7 +165,7 @@ aggregate on a tree is a difference of two root-prefix sums.
 
 Total: `O(m log n + n)`. No shortest-path search anywhere.
 
-The resulting scores are **identical** to what `scaffold.exact` computes in its
+The resulting scores are **identical** to what `scaffold.greedy` computes in its
 first round — in round 1 the support *is* the tree, so `d_H = d_T`. That
 equivalence is a test, not a claim: `tests/test_scoring.py` checks
 `tree_scores` against `path_scores` across five backbones, four parameter sets,
@@ -284,7 +284,7 @@ Do you want one fixed graph, or a fresh one per epoch?
     │
     ├── m > ~10^5 edges ─────────────────────► scaffold.fast
     ├── m < ~10^5 and you want max fidelity ─► scaffold.heap
-    └── validating / a figure / a toy graph ─► scaffold.exact
+    └── validating / a figure / a toy graph ─► scaffold.greedy
 ```
 
 ## Complexity
@@ -293,7 +293,7 @@ For `n` nodes, `m` edges, budget `M`, heap width `k`, forest count `R`:
 
 | | scoring | selection | total |
 |---|---|---|---|
-| `exact` | `O(m(n+m))` per round | argmax | `O(M·m·(n+m))` |
+| `greedy` | `O(m(n+m))` per round | argmax | `O(M·m·(n+m))` |
 | `heap`  | `O(k(n+m))` per round | heap pop | `~O(M·k·(n+m))` |
 | `fast`  | `O(m log n + n)` **once** | one top-k | `O(m log n + n)` |
 | `sample` | `O(R·(m log n + n))` **once** | `O(m)` per draw | precompute + `O(m)`/epoch |
@@ -310,22 +310,22 @@ both. Single-threaded, numba enabled, `scaffold` 0.1.0.
 
 | graph | n | m | keep | method | time (ms) | mean dil | max cong |
 |---|---|---|---|---|---|---|---|
-| grid 24×24 | 576 | 1104 | 0.64 | `exact` | 1,640 | 3.83 | 3.9 |
+| grid 24×24 | 576 | 1104 | 0.64 | `greedy` | 1,640 | 3.83 | 3.9 |
 | | | | | `heap` | 442 | 3.79 | 5.7 |
 | | | | | `fast (topk)` | **0.4** | 12.06 | 26.3 |
 | | | | | `fast (rounds)` | 2.6 | 10.97 | 25.9 |
 | | | | | `sample` | 3.7 | **3.73** | 5.1 |
-| geometric | 600 | 2932 | 0.32 | `exact` | 9,235 | 2.40 | 14.6 |
+| geometric | 600 | 2932 | 0.32 | `greedy` | 9,235 | 2.40 | 14.6 |
 | | | | | `heap` | 1,268 | **2.30** | 17.5 |
 | | | | | `fast (topk)` | **0.8** | 2.68 | 42.0 |
 | | | | | `fast (rounds)` | 8.0 | 2.47 | 29.0 |
 | | | | | `sample` | 6.4 | 2.68 | **23.2** |
-| Barabási–Albert | 600 | 1791 | 0.45 | `exact` | 3,004 | 3.66 | **36.9** |
+| Barabási–Albert | 600 | 1791 | 0.45 | `greedy` | 3,004 | 3.66 | **36.9** |
 | | | | | `heap` | 591 | **3.63** | 141.7 |
 | | | | | `fast (topk)` | **0.6** | 3.82 | 107.1 |
 | | | | | `fast (rounds)` | 4.4 | 3.77 | 120.2 |
 | | | | | `sample` | 4.8 | 3.89 | 177.9 |
-| SBM (4 blocks) | 600 | 3262 | 0.30 | `exact` | 16,354 | **5.13** | **37.1** |
+| SBM (4 blocks) | 600 | 3262 | 0.30 | `greedy` | 16,354 | **5.13** | **37.1** |
 | | | | | `heap` | 1,578 | 5.19 | 78.1 |
 | | | | | `fast (topk)` | **0.8** | 6.92 | 697.1 |
 | | | | | `fast (rounds)` | 9.2 | 5.61 | 141.8 |
@@ -335,28 +335,28 @@ Reproduce with `python benchmarks/bench_methods.py`.
 
 ### What this says
 
-**`fast` is 1,000–20,000× faster and usually within 5–35% of Exact on
+**`fast` is 1,000–20,000× faster and usually within 5–35% of Greedy on
 dilation.** On the geometric and Barabási–Albert graphs the gap is 12% and 4%.
 That is the trade the method is designed to make.
 
 **Its weakness is congestion, not dilation.** Because the score is static and
 never sees the edges already added, `topk` concentrates its picks — worst on
-SBM, where max congestion is 697 against Exact's 37. `selection="rounds"` cuts
+SBM, where max congestion is 697 against Greedy's 37. `selection="rounds"` cuts
 that to 142 for about 10× the time, and `sample` to 82.
 
 **The grid is the pathological case, deliberately.** A lattice produces large
 blocks of exactly-tied scores, so `topk` fills a few neighbourhoods and leaves
-the rest alone: 12.06 against Exact's 3.83. Symmetric synthetic graphs are the
+the rest alone: 12.06 against Greedy's 3.83. Symmetric synthetic graphs are the
 worst case for one-shot scoring; real graphs are not this symmetric.
 
-**`sample` is the quality surprise.** It matches or beats Exact's dilation on
+**`sample` is the quality surprise.** It matches or beats Greedy's dilation on
 the grid (3.73 vs 3.83) at 400× the speed, because tree-locality ordering
 spreads its picks by construction — precisely what `topk` fails to do. If you
 want one fixed graph and quality matters more than the last millisecond, a
 single `sample` draw is a strong option.
 
 **`heap` needs `dirty_limit`.** With unlimited invalidation, one insertion near
-a hub dirties most of the candidate set and Heap becomes slower than Exact
+a hub dirties most of the candidate set and Heap becomes slower than Greedy
 (4,757 ms vs 3,004 ms on Barabási–Albert). The default `dirty_limit=64` brings
 that to 591 ms with mean dilation 3.627 vs 3.630 — an 8× speed-up at no
 measurable quality cost.

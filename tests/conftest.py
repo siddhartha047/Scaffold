@@ -31,8 +31,8 @@ requires_matplotlib = pytest.mark.skipif(
     not _importable("matplotlib"), reason="matplotlib not installed"
 )
 
-ALL_METHODS = ("exact", "heap", "fast", "sample")
-GREEDY_METHODS = ("exact", "heap", "fast")
+ALL_METHODS = ("greedy", "heap", "fast", "sample")
+GREEDY_METHODS = ("greedy", "heap", "fast")
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def grid():
 
 @pytest.fixture
 def small_grid():
-    """5x5 lattice, small enough for the exact variant in a tight loop."""
+    """5x5 lattice, small enough for the greedy variant in a tight loop."""
     return scaffold.grid_graph(5, 5)
 
 

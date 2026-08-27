@@ -1,4 +1,4 @@
-"""SCAFFOLD-Exact: the reference greedy loop.
+"""SCAFFOLD-Greedy: the reference greedy loop.
 
 The literal definition of the method. Starting from the support backbone,
 every remaining edge is scored against the *current* support graph, the single
@@ -95,14 +95,14 @@ def run(
         if verbose:
             best = order[0]
             print(
-                f"[scaffold.exact] round={rounds} added={chosen.size} "
+                f"[scaffold.greedy] round={rounds} added={chosen.size} "
                 f"score={metrics['score'][best]:.6g} "
                 f"dil={metrics['dil'][best]:.4g} "
                 f"edges={ctx.selected}/{ctx.target_edges}"
             )
 
     return ctx.finish(
-        "exact",
+        "greedy",
         rounds=rounds,
         scored_candidates=scored_total,
         batch_size=batch_size,

@@ -100,7 +100,7 @@ of any deterministic option — at `O(n · m · |cut|)`. Guarded at 5,000 edges;
 beyond that it will raise rather than hang.
 
 ```python
-scaffold.exact(G, keep_ratio=0.5, backbone="glst",
+scaffold.greedy(G, keep_ratio=0.5, backbone="glst",
                backbone_options={"eta": 1.0, "alpha": 1.0})
 ```
 

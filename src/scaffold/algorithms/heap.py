@@ -1,6 +1,6 @@
 """SCAFFOLD-Heap: lazy top-k greedy with local invalidation.
 
-SCAFFOLD-Exact rescores *every* candidate after *every* insertion, and almost
+SCAFFOLD-Greedy rescores *every* candidate after *every* insertion, and almost
 all of that work is wasted: adding one edge changes the shortest path of the
 candidates routed near it and leaves the rest of the graph alone.
 
@@ -12,7 +12,7 @@ back with fresh scores; everything else keeps its stale key.
 
 Because a stale score is never *larger* than it should be for the terms that
 shrink monotonically, popping the top ``k`` and rescoring is the classic lazy
-greedy pattern: usually the same choice as Exact, at a fraction of the cost.
+greedy pattern: usually the same choice as Greedy, at a fraction of the cost.
 
 Scoring note
 ------------
@@ -63,7 +63,7 @@ def run(
     Parameters
     ----------
     top_k:
-        Candidates rescored per round. Larger values track Exact more closely
+        Candidates rescored per round. Larger values track Greedy more closely
         and cost proportionally more.
     add_per_round:
         Edges committed per round (per cluster, when clustering is on).
@@ -80,14 +80,14 @@ def run(
         Not a tuning nicety -- it is what keeps the lazy heap lazy. On a
         hub-heavy graph a single insertion near a hub can dirty most of the
         candidate set, at which point "rescore only what changed" degenerates
-        into "rescore everything" and Heap becomes *slower* than Exact. On
+        into "rescore everything" and Heap becomes *slower* than Greedy. On
         Barabasi-Albert (600 nodes, 1,791 edges, ``keep_ratio=0.45``):
         unlimited 4,757 ms, ``dirty_limit=64`` 591 ms, with mean dilation
         3.630 vs 3.627 -- an 8x speed-up for no measurable quality cost.
-        Raise it if you want to track Exact more tightly.
+        Raise it if you want to track Greedy more tightly.
     score_form:
         ``"max"`` (default, see the module docstring) or ``"product"`` for the
-        normalized p-norm objective shared with Exact and Fast.
+        normalized p-norm objective shared with Greedy and Fast.
     """
     ctx = GrowthContext(
         graph,

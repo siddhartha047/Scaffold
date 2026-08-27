@@ -335,7 +335,7 @@ def _root_prefix_kernel(values, parent, order, power, eps, include_root):
 
 
 # ----------------------------------------------------------------------
-# CSR adjacency + shortest paths (used by the exact / heap variants)
+# CSR adjacency + shortest paths (used by the greedy / heap variants)
 # ----------------------------------------------------------------------
 @jit
 def _csr_kernel(num_nodes, src, dst):
