@@ -55,6 +55,7 @@ from typing import Dict, Optional
 import numpy as np
 
 from .kernels import (
+    PARALLEL_TREE_MIN_CANDIDATES,
     _bfs_parents_kernel,
     _edge_congestion_kernel,
     _node_congestion_kernel,
@@ -62,10 +63,15 @@ from .kernels import (
     build_csr,
     build_tree_index,
     depth_order,
+    multi_source_paths,
     parent_edge_weights,
+    path_norms,
     tree_lca,
+    tree_score,
+    tree_terms,
 )
 from .utils.validation import validate_norm_order
+from .utils.workers import parallel_threads, resolve_workers
 
 __all__ = ["ScoreParams", "tree_scores", "path_scores", "combine_terms"]
 
@@ -158,6 +164,7 @@ def tree_scores(
     params: Optional[ScoreParams] = None,
     tree_index=None,
     weighted_paths: bool = False,
+    workers=None,
 ):
     """Score every non-tree edge exactly, in ``O(m log n + n)``.
 
@@ -170,11 +177,20 @@ def tree_scores(
     ``weighted_paths`` selects the numerator: ``False`` (default) counts hops,
     ``True`` sums tree edge weights.
 
+    ``workers`` controls parallelism over the candidate set; see
+    :func:`scaffold.utils.workers.resolve_workers` for how it is resolved. The
+    LCA queries and the per-candidate term assembly dominate the runtime and
+    are independent per candidate, so they run in parallel; the congestion
+    scatter and the root-prefix recurrences stay serial, being both
+    order-dependent and cheap (measured at 5% of the total). The output does
+    not depend on the worker count.
+
     Returns a dict with ``dil``, ``length``, ``econ_path``, ``vcon_path``,
     ``score``, ``mandatory``, ``candidate_mask``, ``edge_congestion``,
     ``node_congestion`` and ``total_stretch``.
     """
     params = params or ScoreParams()
+    workers = resolve_workers(workers)
     num_nodes = int(num_nodes)
     src = np.ascontiguousarray(src, dtype=np.int64)
     dst = np.ascontiguousarray(dst, dtype=np.int64)
@@ -217,83 +233,81 @@ def tree_scores(
             "maxima": (eps, eps, eps),
         }
 
-    cu = src[cand_idx]
-    cv = dst[cand_idx]
-    lca = tree_lca(cu, cv, depth, root, up)
-    connected = lca >= 0
+    cu = np.ascontiguousarray(src[cand_idx])
+    cv = np.ascontiguousarray(dst[cand_idx])
 
-    # TRAP 1: congestion counters see connected candidates only.
-    lca_c = np.ascontiguousarray(lca[connected], dtype=np.int64)
-    cu_c = np.ascontiguousarray(cu[connected], dtype=np.int64)
-    cv_c = np.ascontiguousarray(cv[connected], dtype=np.int64)
+    # On a small candidate set the thread dispatch outweighs the work; scoring
+    # a 24x24 grid measurably regressed before this guard.
+    if cand_idx.size < PARALLEL_TREE_MIN_CANDIDATES:
+        workers = 1
 
-    econ = np.asarray(
-        _edge_congestion_kernel(cu_c, cv_c, lca_c, parent, order, num_nodes)
-    )
-    vcon = np.asarray(_node_congestion_kernel(cu_c, cv_c, lca_c, econ))
+    with parallel_threads(workers):
+        lca = tree_lca(cu, cv, depth, root, up)
+        connected = lca >= 0
 
-    # TRAP 2: edge prefixes exclude the root's (nonexistent) parent edge;
-    # node prefixes include the root itself.
-    sp = np.asarray(
-        _root_prefix_kernel(econ, parent, order, float(params.edge_norm_p), eps, False)
-    )
-    nq = np.asarray(
-        _root_prefix_kernel(vcon, parent, order, float(params.node_norm_q), eps, True)
-    )
-
-    conn_idx = cand_idx[connected]
-    disc_idx = cand_idx[~connected]
-
-    # Hop counts drive the norm denominators: |path_edges| and |path_nodes|.
-    path_len = (
-        depth[cu_c].astype(np.int64)
-        + depth[cv_c].astype(np.int64)
-        - 2 * depth[lca_c].astype(np.int64)
-    )
-    length[conn_idx] = path_len
-
-    if weighted_paths:
-        pw = parent_edge_weights(
-            depth, src[tree_mask], dst[tree_mask], weight[tree_mask], num_nodes
+        # TRAP 1: congestion counters see connected candidates only -- which
+        # both kernels enforce themselves by skipping ``lca < 0``. Compacting
+        # the arrays first would only add three O(m) boolean gathers, and those
+        # are serial NumPy sitting right in the middle of the parallel section.
+        econ = np.asarray(
+            _edge_congestion_kernel(cu, cv, lca, parent, order, num_nodes)
         )
-        wdepth = np.asarray(_root_prefix_kernel(pw, parent, order, 1.0, 0.0, False))
-        path_dist = wdepth[cu_c] + wdepth[cv_c] - 2.0 * wdepth[lca_c]
-    else:
-        path_dist = path_len.astype(np.float64)
+        vcon = np.asarray(_node_congestion_kernel(cu, cv, lca, econ))
 
-    dil[conn_idx] = path_dist / np.maximum(weight[conn_idx], eps)
-    dil[disc_idx] = np.inf
-    mandatory[disc_idx] = True
+        # TRAP 2: edge prefixes exclude the root's (nonexistent) parent edge;
+        # node prefixes include the root itself.
+        sp = np.asarray(
+            _root_prefix_kernel(
+                econ, parent, order, float(params.edge_norm_p), eps, False
+            )
+        )
+        nq = np.asarray(
+            _root_prefix_kernel(
+                vcon, parent, order, float(params.node_norm_q), eps, True
+            )
+        )
 
-    # eConPath: p-norm over the path's tree edges, count = path_len.
-    sigma_e = sp[cu_c] + sp[cv_c] - 2.0 * sp[lca_c]
-    econ_path[conn_idx] = np.maximum(sigma_e, 0.0) / (path_len + eps)
-    econ_path[conn_idx] **= 1.0 / float(params.edge_norm_p)
+        # One fused pass: hop counts, dilation, and both path-congestion norms.
+        c_dil, c_econ, c_vcon, c_len = tree_terms(
+            cu, cv, cand_idx, lca, depth, sp, nq, vcon, weight,
+            params.edge_norm_p, params.node_norm_q, eps,
+        )
 
-    # vConPath: q-norm over the path's *interior* nodes, count = path_len - 1.
-    q = float(params.node_norm_q)
-    sigma_v = (
-        nq[cu_c]
-        + nq[cv_c]
-        - 2.0 * nq[lca_c]
-        + (vcon[lca_c] + eps) ** q
-        - (vcon[cu_c] + eps) ** q
-        - (vcon[cv_c] + eps) ** q
-    )
-    vcon_path[conn_idx] = np.maximum(sigma_v, 0.0) / (path_len - 1 + eps)
-    vcon_path[conn_idx] **= 1.0 / q
+        conn_idx = cand_idx[connected]
+        disc_idx = cand_idx[~connected]
 
-    finite = dil[conn_idx]
-    d_max = float(finite.max()) if finite.size else eps
-    e_max = float(econ_path[cand_idx].max()) if cand_idx.size else eps
-    v_max = float(vcon_path[cand_idx].max()) if cand_idx.size else eps
+        if weighted_paths:
+            # The kernel's dilation counts hops; here the numerator is instead
+            # a sum of tree edge weights, so recompute it for the connected
+            # candidates. The denominator, w_G(e), is unchanged.
+            pw = parent_edge_weights(
+                depth, src[tree_mask], dst[tree_mask], weight[tree_mask], num_nodes
+            )
+            wdepth = np.asarray(_root_prefix_kernel(pw, parent, order, 1.0, 0.0, False))
+            path_dist = (
+                wdepth[cu[connected]]
+                + wdepth[cv[connected]]
+                - 2.0 * wdepth[lca[connected]]
+            )
+            c_dil[connected] = path_dist / np.maximum(weight[conn_idx], eps)
 
-    score[conn_idx] = (
-        ((dil[conn_idx] + eps) / (d_max + eps)) ** params.alpha
-        * ((econ_path[conn_idx] + eps) / (e_max + eps)) ** params.beta_edge
-        * ((vcon_path[conn_idx] + eps) / (v_max + eps)) ** params.beta_node
-    )
-    score[disc_idx] = np.inf
+        length[cand_idx] = c_len
+        dil[cand_idx] = c_dil
+        econ_path[cand_idx] = c_econ
+        vcon_path[cand_idx] = c_vcon
+        mandatory[disc_idx] = True
+
+        # Maxima are reduced here, outside the kernels, so the summation order
+        # is fixed and the score cannot vary with the thread count.
+        finite = c_dil[connected]
+        d_max = float(finite.max()) if finite.size else eps
+        e_max = float(c_econ.max()) if c_econ.size else eps
+        v_max = float(c_vcon.max()) if c_vcon.size else eps
+
+        score[cand_idx] = tree_score(
+            c_dil, c_econ, c_vcon, (d_max, e_max, v_max),
+            params.alpha, params.beta_edge, params.beta_node, eps,
+        )
 
     return {
         "dil": dil,
@@ -322,12 +336,15 @@ class PathScorer:
     graphs use Dijkstra.
     """
 
-    def __init__(self, num_nodes, src, dst, weight=None, support_mask=None):
+    def __init__(
+        self, num_nodes, src, dst, weight=None, support_mask=None, workers=None
+    ):
         self.num_nodes = int(num_nodes)
         self.src = np.ascontiguousarray(src, dtype=np.int64)
         self.dst = np.ascontiguousarray(dst, dtype=np.int64)
         self.weight = None if weight is None else np.asarray(weight, dtype=np.float64)
         self.num_edges = int(self.src.shape[0])
+        self.workers = resolve_workers(workers)
         mask = (
             np.zeros(self.num_edges, dtype=bool)
             if support_mask is None
@@ -425,13 +442,18 @@ class PathScorer:
         edges.reverse()
         return nodes, edges
 
-    def evaluate(self, candidate_ids, params: ScoreParams):
+    def evaluate(self, candidate_ids, params: ScoreParams, need_paths: bool = True):
         """Score ``candidate_ids`` against the current support graph.
 
         Congestion is measured over exactly the candidate set passed in, which
         is what makes cluster-local and top-k evaluation meaningful: a
         candidate is penalised for competing with the batch it is ranked
         against.
+
+        ``need_paths`` controls whether ``path_edges`` / ``path_nodes`` are
+        materialized as Python lists. Only SCAFFOLD-Heap reads them, to
+        maintain its invalidation indexes; Greedy and Batch look at the scores
+        alone, and building the lists for them was a third of their runtime.
         """
         candidate_ids = np.asarray(candidate_ids, dtype=np.int64).reshape(-1)
         n_cand = candidate_ids.size
@@ -454,8 +476,95 @@ class PathScorer:
         graph_weight = (
             self.weight if weighted else np.ones(self.num_edges, dtype=np.float64)
         )
+        self._ensure_csr()
 
-        # Group by source so one search serves every candidate leaving it.
+        # Candidates must reach the kernel grouped by source, so one search
+        # serves every candidate leaving it. Sorting by source is also what
+        # makes the block split below balanced.
+        sources = self.src[candidate_ids]
+        order = np.argsort(sources, kind="stable")
+        ordered_ids = candidate_ids[order]
+
+        with parallel_threads(self.workers):
+            (
+                reached, distance, edge_count,
+                edge_flat, edge_offset, node_flat, node_offset,
+            ) = multi_source_paths(
+                self.num_nodes,
+                self._rowptr, self._col, self._eid,
+                np.ascontiguousarray(sources[order]),
+                np.ascontiguousarray(self.dst[ordered_ids]),
+                weight=self.weight,
+                workers=self.workers,
+            )
+
+            connected[order] = reached
+            dil[order] = np.where(
+                reached,
+                distance / np.maximum(graph_weight[ordered_ids], params.eps),
+                np.inf,
+            )
+
+            if not params.congestion_free:
+                # One pass over the flat buffers replaces the reference's
+                # per-path dict updates. The counts are integer sums over a
+                # fixed buffer, so they cannot depend on the thread schedule.
+                node_count = np.maximum(edge_count - 1, 0)
+                edge_load = np.bincount(
+                    edge_flat, minlength=self.num_edges
+                ).astype(np.float64)
+                node_load = np.bincount(
+                    node_flat, minlength=self.num_nodes
+                ).astype(np.float64)
+                econ_path[order] = path_norms(
+                    edge_flat, edge_offset, edge_count, edge_load,
+                    params.edge_norm_p, params.eps,
+                )
+                vcon_path[order] = path_norms(
+                    node_flat, node_offset, node_count, node_load,
+                    params.node_norm_q, params.eps,
+                )
+
+        score, _ = combine_terms(dil, econ_path, vcon_path, params, finite_mask=connected)
+        result = {
+            "dil": dil,
+            "econ_path": econ_path,
+            "vcon_path": vcon_path,
+            "score": score,
+            "mandatory": ~connected,
+        }
+        if need_paths:
+            result["path_edges"], result["path_nodes"] = _unpack_paths(
+                n_cand, order, reached, edge_count,
+                edge_flat, edge_offset, node_flat, node_offset,
+            )
+        else:
+            result["path_edges"] = result["path_nodes"] = _NO_PATHS
+        return result
+
+    # Kept as the executable specification of the objective. The compiled
+    # ``evaluate`` above must agree with it exactly; ``test_parallel.py``
+    # asserts that on random graphs, weighted and unweighted.
+    def _evaluate_python(self, candidate_ids, params: ScoreParams):
+        """Reference implementation: plain Python, one path at a time."""
+        candidate_ids = np.asarray(candidate_ids, dtype=np.int64).reshape(-1)
+        n_cand = candidate_ids.size
+        dil = np.full(n_cand, np.inf, dtype=np.float64)
+        econ_path = np.zeros(n_cand, dtype=np.float64)
+        vcon_path = np.zeros(n_cand, dtype=np.float64)
+        connected = np.zeros(n_cand, dtype=bool)
+        if n_cand == 0:
+            return {
+                "dil": dil, "econ_path": econ_path, "vcon_path": vcon_path,
+                "score": np.zeros(0, dtype=np.float64),
+                "mandatory": np.zeros(0, dtype=bool),
+                "path_edges": [], "path_nodes": [],
+            }
+
+        weighted = self.weight is not None
+        graph_weight = (
+            self.weight if weighted else np.ones(self.num_edges, dtype=np.float64)
+        )
         sources = self.src[candidate_ids]
         order = np.argsort(sources, kind="stable")
         path_edges = [None] * n_cand
@@ -520,6 +629,48 @@ class PathScorer:
             "path_edges": path_edges,
             "path_nodes": path_nodes,
         }
+
+
+class _NoPaths:
+    """Stands in for the path lists when the caller asked not to build them.
+
+    Indexing it returns an empty tuple, so a consumer that pokes at
+    ``metrics["path_edges"][i]`` gets "no path recorded" rather than an
+    IndexError -- but nothing silently receives a *wrong* path.
+    """
+
+    __slots__ = ()
+
+    def __getitem__(self, index):
+        return ()
+
+    def __bool__(self):
+        return False
+
+
+_NO_PATHS = _NoPaths()
+
+
+def _unpack_paths(
+    n_cand, order, reached, edge_count, edge_flat, edge_offset, node_flat, node_offset
+):
+    """Turn the flat path buffers back into per-candidate Python lists.
+
+    Only SCAFFOLD-Heap needs this; it is deliberately the last thing done and
+    is skipped entirely when ``need_paths`` is false.
+    """
+    path_edges = [None] * n_cand
+    path_nodes = [None] * n_cand
+    for k in range(order.size):
+        if not reached[k]:
+            continue
+        slot = int(order[k])
+        hops = int(edge_count[k])
+        e_at = int(edge_offset[k])
+        n_at = int(node_offset[k])
+        path_edges[slot] = edge_flat[e_at : e_at + hops].tolist()
+        path_nodes[slot] = node_flat[n_at : n_at + max(hops - 1, 0)].tolist()
+    return path_edges, path_nodes
 
 
 def _norm(values, order, eps):

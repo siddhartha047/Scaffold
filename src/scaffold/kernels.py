@@ -26,10 +26,23 @@ import numpy as np
 
 try:  # pragma: no cover - exercised implicitly by whichever branch is installed
     from numba import njit as _njit
+    from numba import prange as _prange
 except Exception:  # pragma: no cover
     _njit = None
+    _prange = range
 
 HAVE_NUMBA = _njit is not None
+
+# Written as ``prange`` in the kernel bodies below; it degrades to the builtin
+# ``range`` when numba is absent, so one source serves both backends.
+prange = _prange
+
+# Below these problem sizes, spawning threads costs more than the work saved,
+# so the kernels are run serially however many workers were asked for. The
+# numbers come from measured crossovers on this hardware and are deliberately
+# conservative -- set past the break-even, not at it.
+PARALLEL_PATH_MIN_CANDIDATES = 256
+PARALLEL_TREE_MIN_CANDIDATES = 8192
 
 
 def jit(func):
@@ -41,6 +54,33 @@ def jit(func):
     if _njit is None:
         return func
     return _njit(cache=True, nogil=True)(func)
+
+
+def jit_parallel(func):
+    """Like :func:`jit`, but with numba's auto-parallelizer enabled.
+
+    Reserved for kernels whose loop iterations are genuinely independent and
+    write to disjoint output slots. The thread count is controlled by
+    :func:`scaffold.utils.workers.parallel_threads` at the call site, not here,
+    and one thread is a perfectly good setting -- a ``prange`` kernel pinned to
+    a single thread measured *slightly faster* than the same body compiled
+    serially, so there is no separate serial build of any of these.
+
+    That is not merely a tidiness decision. **Never decorate one function object
+    with both :func:`jit` and :func:`jit_parallel`.** numba keys its on-disk
+    cache on the function's code location, so the two compilations collide:
+    whichever runs first wins the slot and the other silently loads it. The
+    failure is invisible -- correct results, no speedup, no warning. It cost a
+    full benchmark round to find (parallel LCA 1.22 s from the poisoned cache
+    versus 0.23 s when compiled properly).
+
+    Every kernel decorated with this must produce bitwise-identical output at
+    any thread count: no floating-point reduction may cross iterations, since
+    the summation order would then depend on the scheduler.
+    """
+    if _njit is None:
+        return func
+    return _njit(cache=True, nogil=True, parallel=True)(func)
 
 
 # ----------------------------------------------------------------------
@@ -235,12 +275,18 @@ def _tree_index_kernel(num_nodes, tree_src, tree_dst, levels):
     return depth, root, up, parent, tin
 
 
-@jit
-def _lca_kernel(src, dst, depth, root, up):
+def _lca_body(src, dst, depth, root, up):
+    """One LCA per candidate pair; ``-1`` for cross-component pairs.
+
+    Iterations touch only ``out[i]`` and read the shared ancestor table, so this
+    parallelizes exactly. The body is compiled twice -- once serial, once with
+    the auto-parallelizer -- from this single source; numba treats ``prange`` as
+    ``range`` when ``parallel=False``, and so does the no-numba fallback.
+    """
     n = src.shape[0]
     out = np.full(n, -1, dtype=np.int64)
     levels = up.shape[0]
-    for i in range(n):
+    for i in prange(n):
         a = src[i]
         b = dst[i]
         if root[a] != root[b]:
@@ -264,6 +310,99 @@ def _lca_kernel(src, dst, depth, root, up):
             a = up[0, a]
         out[i] = a
     return out
+
+
+_lca_kernel = jit_parallel(_lca_body)
+
+
+# ----------------------------------------------------------------------
+# fused per-candidate term assembly (the tree scorer's inner loop)
+# ----------------------------------------------------------------------
+def _tree_terms_body(
+    cu, cv, cand, lca, depth, sp, nq, vcon, weight, edge_p, node_q, eps
+):
+    """Dilation and the two path-congestion norms, one candidate per iteration.
+
+    Every quantity is a difference of root-prefix sums through the candidate's
+    LCA, so each iteration is a handful of gathers and writes to its own slot.
+    Fusing them here rather than expressing them as chained NumPy operations
+    removes eight length-``m`` temporaries and lets the loop parallelize.
+
+    Two traps preserved from the array formulation:
+
+    * ``eConPath`` averages over the path's ``path_len`` *edges*, while
+      ``vConPath`` averages over its ``path_len - 1`` *interior nodes*; the LCA
+      and the two endpoints are added back / subtracted out explicitly.
+    * cross-component candidates (``lca < 0``) get infinite dilation and take no
+      part in the congestion statistics.
+    """
+    n = cu.shape[0]
+    dil = np.empty(n, dtype=np.float64)
+    econ_path = np.zeros(n, dtype=np.float64)
+    vcon_path = np.zeros(n, dtype=np.float64)
+    path_len = np.zeros(n, dtype=np.int64)
+    inv_p = 1.0 / edge_p
+    inv_q = 1.0 / node_q
+    for i in prange(n):
+        anc = lca[i]
+        if anc < 0:
+            dil[i] = np.inf
+            continue
+        u = cu[i]
+        v = cv[i]
+        hops = depth[u] + depth[v] - 2 * depth[anc]
+        path_len[i] = hops
+
+        w = weight[cand[i]]
+        if w < eps:
+            w = eps
+        dil[i] = hops / w
+
+        sigma_e = sp[u] + sp[v] - 2.0 * sp[anc]
+        if sigma_e < 0.0:
+            sigma_e = 0.0
+        econ_path[i] = (sigma_e / (hops + eps)) ** inv_p
+
+        sigma_v = (
+            nq[u]
+            + nq[v]
+            - 2.0 * nq[anc]
+            + (vcon[anc] + eps) ** node_q
+            - (vcon[u] + eps) ** node_q
+            - (vcon[v] + eps) ** node_q
+        )
+        if sigma_v < 0.0:
+            sigma_v = 0.0
+        vcon_path[i] = (sigma_v / (hops - 1 + eps)) ** inv_q
+    return dil, econ_path, vcon_path, path_len
+
+
+_tree_terms_kernel = jit_parallel(_tree_terms_body)
+
+
+def _tree_score_body(
+    dil, econ_path, vcon_path, d_max, e_max, v_max, alpha, beta_edge, beta_node, eps
+):
+    """Normalize the three terms by their maxima and combine them.
+
+    The maxima arrive as scalars computed by the caller, so no reduction
+    crosses iterations here and the result cannot depend on the thread count.
+    """
+    n = dil.shape[0]
+    out = np.empty(n, dtype=np.float64)
+    for i in prange(n):
+        if not np.isfinite(dil[i]):
+            out[i] = np.inf
+        else:
+            out[i] = (
+                ((dil[i] + eps) / (d_max + eps)) ** alpha
+                * ((econ_path[i] + eps) / (e_max + eps)) ** beta_edge
+                * ((vcon_path[i] + eps) / (v_max + eps)) ** beta_node
+            )
+    return out
+
+
+_tree_score_kernel = jit_parallel(_tree_score_body)
 
 
 # ----------------------------------------------------------------------
@@ -395,6 +534,245 @@ def _bfs_parents_kernel(source, rowptr, col, eid, parent, parent_edge, dist, sta
 
 
 # ----------------------------------------------------------------------
+# multi-source path evaluation (the greedy / heap / batch inner loop)
+# ----------------------------------------------------------------------
+# Candidates are grouped by source so one search serves every candidate leaving
+# it, and the groups are then dealt into contiguous *blocks* -- one per worker.
+# Blocks, rather than groups, are the unit of parallelism: each block owns a row
+# of the scratch arrays for the whole time it runs, which avoids both a
+# per-group O(n) allocation and any dependence on numba's thread ids.
+
+
+@jit
+def _heap_push(heap_dist, heap_node, size, dist, node):
+    """Binary min-heap ordered by ``(dist, node)``.
+
+    The node id is part of the key, not a tiebreak afterthought: Python's
+    ``heapq`` compares the ``(dist, node)`` tuples the reference implementation
+    pushes, so matching that ordering is what makes the compiled Dijkstra
+    settle vertices in the same sequence and therefore produce the same
+    parent pointers -- and the same paths, and the same congestion.
+    """
+    i = size
+    heap_dist[i] = dist
+    heap_node[i] = node
+    while i > 0:
+        parent = (i - 1) >> 1
+        if heap_dist[parent] < heap_dist[i] or (
+            heap_dist[parent] == heap_dist[i] and heap_node[parent] <= heap_node[i]
+        ):
+            break
+        td = heap_dist[parent]; heap_dist[parent] = heap_dist[i]; heap_dist[i] = td
+        tn = heap_node[parent]; heap_node[parent] = heap_node[i]; heap_node[i] = tn
+        i = parent
+    return size + 1
+
+
+@jit
+def _heap_pop(heap_dist, heap_node, size):
+    """Remove and return the ``(dist, node)`` minimum; returns the new size too."""
+    top_dist = heap_dist[0]
+    top_node = heap_node[0]
+    size -= 1
+    heap_dist[0] = heap_dist[size]
+    heap_node[0] = heap_node[size]
+    i = 0
+    while True:
+        left = 2 * i + 1
+        if left >= size:
+            break
+        smallest = left
+        right = left + 1
+        if right < size and (
+            heap_dist[right] < heap_dist[left]
+            or (
+                heap_dist[right] == heap_dist[left]
+                and heap_node[right] < heap_node[left]
+            )
+        ):
+            smallest = right
+        if heap_dist[i] < heap_dist[smallest] or (
+            heap_dist[i] == heap_dist[smallest]
+            and heap_node[i] <= heap_node[smallest]
+        ):
+            break
+        td = heap_dist[smallest]; heap_dist[smallest] = heap_dist[i]; heap_dist[i] = td
+        tn = heap_node[smallest]; heap_node[smallest] = heap_node[i]; heap_node[i] = tn
+        i = smallest
+    return top_dist, top_node, size
+
+
+@jit
+def _search_from(
+    source, rowptr, col, eid, weight, weighted,
+    parent, parent_edge, dist, hops, stamp, token,
+    heap_dist, heap_node, settled,
+):
+    """One single-source search, writing parent pointers into caller scratch.
+
+    BFS when ``weighted`` is false, Dijkstra otherwise. ``stamp``/``token`` mark
+    reached nodes so the O(n) scratch never has to be cleared between sources.
+    Both branches mirror the reference implementation's traversal order exactly.
+    """
+    stamp[source] = token
+    parent[source] = -1
+    parent_edge[source] = -1
+    dist[source] = 0.0
+    hops[source] = 0
+
+    if not weighted:
+        # A plain FIFO queue reusing heap_node as its backing store.
+        head = 0
+        tail = 0
+        heap_node[tail] = source
+        tail += 1
+        while head < tail:
+            node = heap_node[head]
+            head += 1
+            for pos in range(rowptr[node], rowptr[node + 1]):
+                nb = col[pos]
+                if stamp[nb] == token:
+                    continue
+                stamp[nb] = token
+                parent[nb] = node
+                parent_edge[nb] = eid[pos]
+                hops[nb] = hops[node] + 1
+                dist[nb] = hops[nb]
+                heap_node[tail] = nb
+                tail += 1
+        return
+
+    size = _heap_push(heap_dist, heap_node, 0, 0.0, source)
+    while size > 0:
+        d, node, size = _heap_pop(heap_dist, heap_node, size)
+        if settled[node] == token:
+            continue
+        settled[node] = token
+        for pos in range(rowptr[node], rowptr[node + 1]):
+            nb = col[pos]
+            if settled[nb] == token:
+                continue
+            cand = d + weight[eid[pos]]
+            if stamp[nb] != token or cand < dist[nb]:
+                stamp[nb] = token
+                dist[nb] = cand
+                hops[nb] = hops[node] + 1
+                parent[nb] = node
+                parent_edge[nb] = eid[pos]
+                size = _heap_push(heap_dist, heap_node, size, cand, nb)
+
+
+def _path_lengths_body(
+    block_start, group_start, group_source, cand_dst,
+    rowptr, col, eid, weight, weighted,
+    parent, parent_edge, dist, hops, stamp, heap_dist, heap_node, settled,
+):
+    """Pass 1: reachability, distance and hop count for every candidate.
+
+    No path is walked here. Knowing each path's length up front turns the flat
+    path buffer into an exact prefix-sum layout, so pass 2 can fill it from
+    several threads without any of them needing to know what the others found.
+    """
+    n_cand = cand_dst.shape[0]
+    out_dist = np.zeros(n_cand, dtype=np.float64)
+    out_hops = np.zeros(n_cand, dtype=np.int64)
+    reached = np.zeros(n_cand, dtype=np.bool_)
+    n_blocks = block_start.shape[0] - 1
+
+    for b in prange(n_blocks):
+        token = 0
+        for g in range(block_start[b], block_start[b + 1]):
+            token += 1
+            _search_from(
+                group_source[g], rowptr, col, eid, weight, weighted,
+                parent[b], parent_edge[b], dist[b], hops[b], stamp[b], token,
+                heap_dist[b], heap_node[b], settled[b],
+            )
+            for i in range(group_start[g], group_start[g + 1]):
+                target = cand_dst[i]
+                if stamp[b, target] != token:
+                    continue
+                reached[i] = True
+                out_dist[i] = dist[b, target]
+                out_hops[i] = hops[b, target]
+    return out_dist, out_hops, reached
+
+
+_path_lengths_kernel = jit_parallel(_path_lengths_body)
+
+
+def _path_fill_body(
+    block_start, group_start, group_source, cand_dst,
+    rowptr, col, eid, weight, weighted,
+    reached, edge_offset, node_offset,
+    edge_flat, node_flat,
+    parent, parent_edge, dist, hops, stamp, heap_dist, heap_node, settled,
+):
+    """Pass 2: walk each candidate's path into its preallocated slot.
+
+    Re-running the search costs one extra traversal, but the search was only
+    ~9% of this routine's cost even before compilation, and paying it buys a
+    layout that is fixed before any thread starts writing -- which is what makes
+    the output independent of the scheduler.
+    """
+    n_blocks = block_start.shape[0] - 1
+    for b in prange(n_blocks):
+        token = 0
+        for g in range(block_start[b], block_start[b + 1]):
+            token += 1
+            _search_from(
+                group_source[g], rowptr, col, eid, weight, weighted,
+                parent[b], parent_edge[b], dist[b], hops[b], stamp[b], token,
+                heap_dist[b], heap_node[b], settled[b],
+            )
+            for i in range(group_start[g], group_start[g + 1]):
+                if not reached[i]:
+                    continue
+                # Walk target -> source. The reference reverses the path before
+                # use; order within a slot is irrelevant here because every
+                # consumer either counts or sums over the whole slot.
+                node = cand_dst[i]
+                e_at = edge_offset[i]
+                n_at = node_offset[i]
+                while parent[b, node] != -1:
+                    edge_flat[e_at] = parent_edge[b, node]
+                    e_at += 1
+                    node = parent[b, node]
+                    if parent[b, node] != -1:
+                        # Interior nodes only: the source itself is excluded,
+                        # as is the target, which was never appended.
+                        node_flat[n_at] = node
+                        n_at += 1
+
+
+_path_fill_kernel = jit_parallel(_path_fill_body)
+
+
+def _path_norms_body(flat, offset, count, load, order, eps):
+    """Pass 3: the normalized p-norm of ``load`` over each candidate's slot.
+
+    Mirrors the reference ``_norm``: ``(sum((v + eps) ** p) / (len + eps)) **
+    (1 / p)``, and 0 for an empty slot.
+    """
+    n = offset.shape[0]
+    out = np.zeros(n, dtype=np.float64)
+    inv = 1.0 / order
+    for i in prange(n):
+        k = count[i]
+        if k <= 0:
+            continue
+        total = 0.0
+        base = offset[i]
+        for j in range(k):
+            total += (load[flat[base + j]] + eps) ** order
+        out[i] = (total / (k + eps)) ** inv
+    return out
+
+
+_path_norms_kernel = jit_parallel(_path_norms_body)
+
+
+# ----------------------------------------------------------------------
 # public wrappers
 # ----------------------------------------------------------------------
 def spanning_forest_mask(num_nodes, src, dst, visit_order, max_edges=None):
@@ -488,12 +866,178 @@ def depth_order(depth):
 
 
 def tree_lca(src, dst, depth, root, up):
-    """LCA per pair; ``-1`` when the endpoints lie in different components."""
+    """LCA per pair; ``-1`` when the endpoints lie in different components.
+
+    Thread count comes from whatever
+    :func:`~scaffold.utils.workers.parallel_threads` scope encloses the call;
+    the result is identical at any of them, since each pair is resolved
+    independently.
+    """
     src = np.ascontiguousarray(src, dtype=np.int64)
     dst = np.ascontiguousarray(dst, dtype=np.int64)
     if src.shape[0] == 0:
         return np.zeros(0, dtype=np.int64)
     return np.asarray(_lca_kernel(src, dst, depth, root, up))
+
+
+def tree_terms(cu, cv, cand, lca, depth, sp, nq, vcon, weight, edge_p, node_q, eps):
+    """Per-candidate dilation and path-congestion norms; see ``_tree_terms_body``."""
+    dil, econ_path, vcon_path, path_len = _tree_terms_kernel(
+        np.ascontiguousarray(cu, dtype=np.int64),
+        np.ascontiguousarray(cv, dtype=np.int64),
+        np.ascontiguousarray(cand, dtype=np.int64),
+        np.ascontiguousarray(lca, dtype=np.int64),
+        np.ascontiguousarray(depth, dtype=np.int64),
+        np.ascontiguousarray(sp, dtype=np.float64),
+        np.ascontiguousarray(nq, dtype=np.float64),
+        np.ascontiguousarray(vcon, dtype=np.float64),
+        np.ascontiguousarray(weight, dtype=np.float64),
+        float(edge_p),
+        float(node_q),
+        float(eps),
+    )
+    return np.asarray(dil), np.asarray(econ_path), np.asarray(vcon_path), np.asarray(path_len)
+
+
+def tree_score(dil, econ_path, vcon_path, maxima, alpha, beta_edge, beta_node, eps):
+    """Combine the three normalized terms into the SCAFFOLD score."""
+    d_max, e_max, v_max = maxima
+    return np.asarray(
+        _tree_score_kernel(
+            np.ascontiguousarray(dil, dtype=np.float64),
+            np.ascontiguousarray(econ_path, dtype=np.float64),
+            np.ascontiguousarray(vcon_path, dtype=np.float64),
+            float(d_max),
+            float(e_max),
+            float(v_max),
+            float(alpha),
+            float(beta_edge),
+            float(beta_node),
+            float(eps),
+        )
+    )
+
+
+def multi_source_paths(
+    num_nodes, rowptr, col, eid, cand_src, cand_dst, weight=None, workers: int = 1
+):
+    """Shortest path from each candidate's source to its target, all at once.
+
+    Candidates must arrive sorted by source. Returns
+    ``(reached, dist, hops, edge_flat, edge_offset, node_flat, node_offset)``,
+    where the two ``*_flat`` arrays hold every path's edge ids and interior node
+    ids concatenated, and the ``*_offset`` arrays say where each candidate's
+    slice begins. A candidate's slices have length ``hops[i]`` and
+    ``hops[i] - 1`` respectively.
+
+    Returning a flat buffer rather than a list of lists is the point: the
+    congestion counters become one ``bincount`` over the whole buffer instead of
+    a Python dict updated a few million times, and the norms become a strided
+    scan. Both are what made this loop slow.
+    """
+    n_cand = int(cand_dst.shape[0])
+    empty_i = np.zeros(0, dtype=np.int64)
+    if n_cand == 0:
+        return (
+            np.zeros(0, dtype=bool), np.zeros(0, dtype=np.float64), empty_i,
+            empty_i, empty_i, empty_i, empty_i,
+        )
+
+    weighted = weight is not None
+    weight_arr = (
+        np.ascontiguousarray(weight, dtype=np.float64)
+        if weighted
+        else np.zeros(1, dtype=np.float64)
+    )
+
+    # Group boundaries: one search serves every candidate leaving a source.
+    boundary = np.flatnonzero(np.diff(cand_src)) + 1
+    group_start = np.concatenate(
+        (np.zeros(1, dtype=np.int64), boundary.astype(np.int64),
+         np.array([n_cand], dtype=np.int64))
+    )
+    group_source = np.ascontiguousarray(cand_src[group_start[:-1]], dtype=np.int64)
+    n_groups = int(group_source.shape[0])
+
+    # Deal the groups into contiguous blocks of roughly equal candidate count,
+    # one per worker. Balancing on candidates rather than on groups matters:
+    # a single high-degree source can own a large share of the work.
+    #
+    # Below a few hundred candidates the thread dispatch costs more than the
+    # searches do, and SCAFFOLD-Heap calls this with a few dozen candidates
+    # thousands of times over, so the threshold is load-bearing rather than a
+    # micro-optimization. Measured crossover is well under 1,000 candidates
+    # (1,336 candidates already ran 1.6x faster on 8 threads).
+    if n_cand < PARALLEL_PATH_MIN_CANDIDATES:
+        workers = 1
+    n_blocks = max(1, min(int(workers), n_groups))
+    if n_blocks == 1:
+        block_start = np.array([0, n_groups], dtype=np.int64)
+    else:
+        cuts = np.linspace(0, n_cand, n_blocks + 1)[1:-1]
+        block_start = np.concatenate(
+            (
+                np.zeros(1, dtype=np.int64),
+                np.unique(np.searchsorted(group_start[1:-1], cuts) + 1).astype(np.int64),
+                np.array([n_groups], dtype=np.int64),
+            )
+        )
+        block_start = np.unique(block_start)
+        n_blocks = int(block_start.shape[0]) - 1
+
+    # Per-block scratch: each block owns a row for as long as it runs, which is
+    # why no thread ids are needed and no two blocks can ever collide.
+    heap_capacity = max(int(num_nodes), int(eid.shape[0])) + 1
+    parent = np.empty((n_blocks, num_nodes), dtype=np.int64)
+    parent_edge = np.empty((n_blocks, num_nodes), dtype=np.int64)
+    dist = np.empty((n_blocks, num_nodes), dtype=np.float64)
+    hops = np.empty((n_blocks, num_nodes), dtype=np.int64)
+    stamp = np.zeros((n_blocks, num_nodes), dtype=np.int64)
+    settled = np.zeros((n_blocks, num_nodes), dtype=np.int64)
+    heap_dist = np.empty((n_blocks, heap_capacity), dtype=np.float64)
+    heap_node = np.empty((n_blocks, heap_capacity), dtype=np.int64)
+
+    args = (
+        block_start, group_start, group_source, cand_dst,
+        rowptr, col, eid, weight_arr, weighted,
+    )
+    scratch = (parent, parent_edge, dist, hops, stamp, heap_dist, heap_node, settled)
+
+    out_dist, out_hops, reached = _path_lengths_kernel(*args, *scratch)
+
+    edge_count = np.where(reached, out_hops, 0)
+    node_count = np.maximum(edge_count - 1, 0)
+    edge_offset = np.zeros(n_cand, dtype=np.int64)
+    node_offset = np.zeros(n_cand, dtype=np.int64)
+    np.cumsum(edge_count[:-1], out=edge_offset[1:])
+    np.cumsum(node_count[:-1], out=node_offset[1:])
+
+    edge_flat = np.zeros(int(edge_count.sum()), dtype=np.int64)
+    node_flat = np.zeros(int(node_count.sum()), dtype=np.int64)
+
+    # Reset the visit stamps: pass 2 restarts its token count from zero.
+    stamp.fill(0)
+    settled.fill(0)
+    _path_fill_kernel(
+        *args, reached, edge_offset, node_offset, edge_flat, node_flat, *scratch
+    )
+    return reached, out_dist, edge_count, edge_flat, edge_offset, node_flat, node_offset
+
+
+def path_norms(flat, offset, count, load, order, eps):
+    """Normalized ``order``-norm of ``load`` over each candidate's path slice."""
+    if offset.shape[0] == 0:
+        return np.zeros(0, dtype=np.float64)
+    return np.asarray(
+        _path_norms_kernel(
+            np.ascontiguousarray(flat, dtype=np.int64),
+            np.ascontiguousarray(offset, dtype=np.int64),
+            np.ascontiguousarray(count, dtype=np.int64),
+            np.ascontiguousarray(load, dtype=np.float64),
+            float(order),
+            float(eps),
+        )
+    )
 
 
 def build_csr(num_nodes, src, dst):

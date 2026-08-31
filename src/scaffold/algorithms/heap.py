@@ -38,6 +38,7 @@ from ..backbone import DEFAULT_BACKBONE
 from ..clustering import assign_clusters, cluster_edges
 from ..graph import Graph
 from ..scoring import PathScorer, ScoreParams
+from ..utils.workers import resolve_workers
 from .base import GrowthContext
 
 
@@ -56,6 +57,7 @@ def run(
     dirty_limit: int = 64,
     score_form: str = "max",
     backbone_options=None,
+    workers=None,
     verbose: bool = False,
 ):
     """Grow the support with a lazy max-heap over candidate scores.
@@ -106,12 +108,14 @@ def run(
     local_radius = max(0, int(local_radius))
     dirty_limit = max(0, int(dirty_limit))
 
+    workers = resolve_workers(workers)
     scorer = PathScorer(
         graph.num_nodes,
         graph.src,
         graph.dst,
         weight=graph.edge_weight,
         support_mask=ctx.mask.copy(),
+        workers=workers,
     )
 
     node_labels = assign_clusters(graph, clusters, method=cluster_method, seed=seed)
@@ -272,6 +276,7 @@ def run(
         add_per_round=add_per_round,
         clusters=int(cluster_ids.size),
         score_form=score_form,
+        workers=workers,
     )
 
 
