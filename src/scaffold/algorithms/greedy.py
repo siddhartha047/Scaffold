@@ -25,6 +25,7 @@ import numpy as np
 from ..backbone import DEFAULT_BACKBONE
 from ..graph import Graph
 from ..scoring import PathScorer, ScoreParams
+from ..utils.workers import resolve_workers
 from .base import GrowthContext
 
 
@@ -38,6 +39,7 @@ def run(
     batch_size: int = 1,
     backbone_options=None,
     max_rounds: Optional[int] = None,
+    workers=None,
     verbose: bool = False,
 ):
     """Grow the support one (or ``batch_size``) best-scoring edge at a time.
@@ -62,12 +64,14 @@ def run(
     )
     batch_size = max(1, int(batch_size))
 
+    workers = resolve_workers(workers)
     scorer = PathScorer(
         graph.num_nodes,
         graph.src,
         graph.dst,
         weight=graph.edge_weight,
         support_mask=ctx.mask.copy(),
+        workers=workers,
     )
 
     rounds = 0
@@ -79,7 +83,9 @@ def run(
         if candidates.size == 0:
             break
 
-        metrics = scorer.evaluate(candidates, ctx.params)
+        # Greedy ranks on the score alone; materializing every candidate's
+        # path list would be a third of the runtime for nothing.
+        metrics = scorer.evaluate(candidates, ctx.params, need_paths=False)
         rounds += 1
         scored_total += int(candidates.size)
 
@@ -106,4 +112,5 @@ def run(
         rounds=rounds,
         scored_candidates=scored_total,
         batch_size=batch_size,
+        workers=workers,
     )

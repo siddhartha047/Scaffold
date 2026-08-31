@@ -323,6 +323,49 @@ Details in [`docs/algorithms.md`](https://github.com/siddhartha047/Scaffold/blob
 
 ---
 
+## Parallelism
+
+Every variant takes a `workers` argument. It is a pure speed knob: the selected
+edges are **bit-for-bit identical at any worker count**, so you can tune it
+without invalidating a comparison.
+
+```python
+scaffold.fast(G, keep_ratio=0.2)              # auto: min(8, cpus)
+scaffold.fast(G, keep_ratio=0.2, workers=4)   # explicit
+scaffold.fast(G, keep_ratio=0.2, workers=1)   # serial
+scaffold.fast(G, keep_ratio=0.2, workers="all")  # every core in the affinity mask
+```
+
+With `workers` unset the count is resolved from `SCAFFOLD_NUM_WORKERS`, then
+`OMP_NUM_THREADS`, then `min(8, len(os.sched_getaffinity(0)))`. The default is
+capped rather than taking the whole machine, because several unthrottled jobs
+on one node slow each other down badly; to run a batch, cap them together:
+
+```bash
+OMP_NUM_THREADS=4 python train.py &   # four jobs, four threads each
+```
+
+What actually runs in parallel, measured on 8 threads:
+
+| | parallel over | speed-up |
+|---|---|---|
+| `fast`, `sample` | candidates within one scoring pass | ~3x |
+| `sample` precompute | that, plus the `tree_count` backbones | ~2.8x |
+| `greedy`, `heap`, `batch` | candidate source groups in the path scorer | 2.5-3.4x end to end |
+
+The path-based variants gained much more than threading alone would give: their
+inner loop was rewritten as compiled kernels first. On a weighted graph, where
+the old scorer ran Python's `heapq` Dijkstra, scoring is ~40x faster at 8
+threads; unweighted, ~8x.
+
+Small graphs fall back to serial automatically -- below a few hundred
+candidates the thread dispatch costs more than the work.
+
+Numba is required for any of this. Without it the kernels still run, as plain
+Python loops, and `workers` has no effect.
+
+---
+
 ## Installation
 
 During private testing, install from the private GitHub repository:

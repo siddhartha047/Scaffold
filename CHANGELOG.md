@@ -6,6 +6,42 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`workers` on all five algorithms.** Resolved from the argument, then
+  `SCAFFOLD_NUM_WORKERS`, then `OMP_NUM_THREADS`, then `min(8, cpus)`. The cap
+  is deliberate: several unthrottled jobs on one node slow each other down far
+  more than the extra threads gain. `workers="all"` opts out.
+  Results are bit-for-bit identical at every worker count — the new
+  `tests/test_parallel.py` asserts exact equality, not tolerance, for all five
+  variants across grids, weighted, disconnected and truncated-forest graphs.
+- `scaffold.utils.workers` with `resolve_workers`, `parallel_threads` and
+  `split_workers`.
+- `--workers` on `benchmarks/bench_methods.py`.
+
+### Changed
+
+- **Tree scorer (`fast`, `sample`) parallelized over candidates.** The LCA
+  queries and per-candidate term assembly moved into fused `prange` kernels,
+  replacing a chain of NumPy temporaries. ~3x on 8 threads, and ~1.4x even
+  serially because the fusion drops eight length-`m` intermediates.
+- **`sample` precompute runs its `tree_count` backbones through a thread pool**,
+  its widest parallel axis — it covers the serial union-find forest build too.
+  Contributions are accumulated in backbone order, never completion order, so
+  `pi` cannot drift with the schedule.
+- **Path scorer (`greedy`, `heap`, `batch`) compiled.** `PathScorer.evaluate`
+  was ~90% Python interpreter overhead — path reconstruction and dict-based
+  congestion counters — which no amount of threading could fix. It is now a
+  three-pass compiled pipeline (lengths → prefix-sum layout → parallel fill),
+  with congestion via `bincount` over a flat buffer and a numba binary-heap
+  Dijkstra replacing `heapq`. Scoring is ~8x faster unweighted and ~40x
+  weighted at 8 threads; 2.5–3.4x end to end.
+  `PathScorer._evaluate_python` is kept as the executable specification, and is
+  asserted against on random weighted and unweighted graphs.
+- `PathScorer.evaluate` takes `need_paths`; `greedy` and `batch` skip building
+  per-candidate path lists they never read.
+- Small inputs fall back to serial automatically, below measured crossovers.
+
 ## [0.1.0] — 2026-08-21
 
 First release. Private install from the GitHub repository; see

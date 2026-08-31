@@ -62,6 +62,7 @@ from ..backbone import DEFAULT_BACKBONE
 from ..graph import Graph
 from ..kernels import build_tree_index
 from ..scoring import ScoreParams, tree_scores
+from ..utils.workers import resolve_workers
 from .base import GrowthContext, take_top
 
 
@@ -76,6 +77,7 @@ def run(
     weighted_paths: bool = False,
     backbone_options=None,
     return_scores: bool = False,
+    workers=None,
     verbose: bool = False,
 ):
     """Score every candidate once with the tree kernel, then select.
@@ -92,6 +94,11 @@ def run(
         Also return the per-edge score array in the metadata under
         ``"scores"``. Handy for plotting and for reusing one scoring pass
         across several budgets.
+    workers:
+        Threads used for the single scoring pass, which is where essentially
+        all of Fast's time goes. ``None`` resolves automatically; see
+        :func:`scaffold.utils.workers.resolve_workers`. The selected edges are
+        identical at any worker count.
     """
     ctx = GrowthContext(
         graph,
@@ -116,6 +123,7 @@ def run(
     tree_index = build_tree_index(
         graph.num_nodes, graph.src[ctx.mask], graph.dst[ctx.mask]
     )
+    workers = resolve_workers(workers)
     scored = tree_scores(
         graph.num_nodes,
         graph.src,
@@ -125,6 +133,7 @@ def run(
         params=ctx.params,
         tree_index=tree_index,
         weighted_paths=weighted_paths,
+        workers=workers,
     )
     scores = scored["score"]
     candidates = ctx.candidate_ids()
@@ -141,6 +150,7 @@ def run(
         "mandatory_edges": int(scored["mandatory"].sum()),
         "total_stretch": float(scored["total_stretch"]),
         "weighted_paths": bool(weighted_paths),
+        "workers": int(workers),
     }
     if return_scores:
         extra["scores"] = scores

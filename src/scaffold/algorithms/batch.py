@@ -25,6 +25,7 @@ from ..backbone import DEFAULT_BACKBONE
 from ..clustering import assign_clusters, cluster_edges
 from ..graph import Graph
 from ..scoring import PathScorer, ScoreParams
+from ..utils.workers import resolve_workers
 from .base import GrowthContext, degree_weighted_sample, selected_degrees
 
 
@@ -40,6 +41,7 @@ def run(
     sample_size: int = 64,
     add_per_round: int = 8,
     backbone_options=None,
+    workers=None,
     verbose: bool = False,
 ):
     """Grow a support graph with sampled-batch dilation/congestion scoring.
@@ -60,6 +62,7 @@ def run(
             "whole sampled batch is committed and scoring has no effect"
         )
 
+    workers = resolve_workers(workers)
     ctx = GrowthContext(
         graph,
         keep_ratio=keep_ratio,
@@ -78,6 +81,7 @@ def run(
             sample_size=sample_size,
             add_per_round=add_per_round,
             score_scope="sampled_batch",
+            workers=workers,
         )
 
     node_labels = assign_clusters(graph, clusters, method=cluster_method, seed=seed)
@@ -90,6 +94,7 @@ def run(
         graph.dst,
         weight=graph.edge_weight,
         support_mask=ctx.mask.copy(),
+        workers=workers,
     )
 
     rounds = 0
@@ -111,7 +116,8 @@ def run(
             batch = degree_weighted_sample(
                 pool, graph.src, graph.dst, degree, sample_size, rng
             )
-            metrics = scorer.evaluate(batch, ctx.params)
+            # Only the scores are read here; skip building the path lists.
+            metrics = scorer.evaluate(batch, ctx.params, need_paths=False)
             sampled_total += int(batch.size)
             scored_total += int(batch.size)
             mandatory_total += int(metrics["mandatory"].sum())
@@ -153,6 +159,7 @@ def run(
         mandatory_candidates=mandatory_total,
         score_scope="sampled_batch",
         selection="sampled_topk",
+        workers=workers,
     )
 
 

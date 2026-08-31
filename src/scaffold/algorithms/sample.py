@@ -44,6 +44,7 @@ at random for each draw and ``below_connectivity_floor`` is set in the metadata.
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import numpy as np
@@ -58,10 +59,15 @@ from ..kernels import (
 )
 from ..scoring import ScoreParams, tree_scores
 from ..utils.validation import connectivity_floor, resolve_budget
+from ..utils.workers import parallel_threads, resolve_workers, split_workers
 
 DEFAULT_TREE_COUNT = 8
 DEFAULT_LAMBDA = 1.0
 EPS = 1e-8
+
+# Below this many edges the per-backbone work is too small to hand to a thread
+# pool; see the measured crossover quoted at the use site in ``fit``.
+PARALLEL_SAMPLE_MIN_EDGES = 50_000
 
 __all__ = ["ScaffoldSampler", "cap_and_renormalize", "run"]
 
@@ -128,10 +134,12 @@ class ScaffoldSampler:
         scheme: str = "systematic",
         weighted_paths: bool = False,
         seed=None,
+        workers=None,
         verbose: bool = False,
     ):
         self.params = params or ScoreParams()
         self.tree_count = max(1, int(tree_count))
+        self.workers = resolve_workers(workers)
         self.aggregate_lambda = float(aggregate_lambda)
         backbone = str(backbone).strip().lower().replace("_", "-")
         if backbone not in ("fixed-maxst", "fixed-randst", "rotate-randst"):
@@ -199,14 +207,24 @@ class ScaffoldSampler:
             n, src, dst, det_mask, weight,
             params=self.params, tree_index=det_index,
             weighted_paths=self.weighted_paths,
+            workers=self.workers,  # runs alone: give it every worker
         )
 
         # --- R random forests ----------------------------------------------
-        accumulated = np.zeros(m, dtype=np.float64)
-        frequency = np.zeros(m, dtype=np.float64)
-        mandatory = det_out["mandatory"].copy()
-        forests = []
-        for r in range(self.tree_count):
+        # The R backbones are independent, which makes them the widest parallel
+        # axis available here -- and the only one that also covers the union-find
+        # forest construction, which is serial within a single backbone. When
+        # there are fewer backbones than workers the leftovers go to the tree
+        # scorer's own candidate-level parallelism instead of oversubscribing.
+        outer, inner = split_workers(self.tree_count, self.workers)
+        if m < PARALLEL_SAMPLE_MIN_EDGES:
+            # Scoring a small graph takes a couple of milliseconds per
+            # backbone, less than it costs to hand the work to a pool. Measured
+            # on 8 backbones: 0.32x at 1.5k edges, 0.90x at 24k, 1.58x at 80k,
+            # 3.59x at 320k. The threshold sits comfortably past break-even.
+            outer, inner = 1, self.workers
+
+        def score_forest(r):
             rng = np.random.default_rng(
                 None if self.seed is None else int(self.seed) + 1000 * (r + 1)
             )
@@ -216,7 +234,33 @@ class ScaffoldSampler:
             out = tree_scores(
                 n, src, dst, mask, weight,
                 params=self.params, weighted_paths=self.weighted_paths,
+                workers=inner,
             )
+            return mask, out
+
+
+        if outer > 1:
+            # Pin the inner thread count *outside* the pool, so each worker
+            # thread's tree_scores call finds the pin already in place rather
+            # than racing to reset a process-global.
+            with parallel_threads(inner), ThreadPoolExecutor(
+                max_workers=outer
+            ) as pool:
+                results = list(pool.map(score_forest, range(self.tree_count)))
+        else:
+            # No pool, so nothing to protect -- and pinning here would override
+            # each tree_scores call's own decision to drop to one thread on a
+            # small candidate set, since a nested pin is a no-op by design.
+            results = [score_forest(r) for r in range(self.tree_count)]
+
+        accumulated = np.zeros(m, dtype=np.float64)
+        frequency = np.zeros(m, dtype=np.float64)
+        mandatory = det_out["mandatory"].copy()
+        forests = []
+        # Accumulated in forest order, never in completion order: these are
+        # float sums, so a scheduler-dependent order would make pi depend on
+        # the worker count.
+        for r, (mask, out) in enumerate(results):
             values = out["score"]
             finite = np.isfinite(values)
             total = float(values[finite].sum())
@@ -526,6 +570,7 @@ def run(
     backbone: str = "fixed-maxst",
     scheme: str = "systematic",
     weighted_paths: bool = False,
+    workers=None,
     verbose: bool = False,
 ) -> ScaffoldSampler:
     """Fit and return a :class:`ScaffoldSampler` for ``graph``."""
@@ -537,6 +582,7 @@ def run(
         scheme=scheme,
         weighted_paths=weighted_paths,
         seed=seed,
+        workers=workers,
         verbose=verbose,
     )
     return sampler.fit(graph)

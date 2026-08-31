@@ -16,8 +16,10 @@ Quality is measured with ``path_scores``, which evaluates the objective against
 an arbitrary support graph. It costs a full shortest-path pass, so it is capped
 by ``--quality-max-edges`` and skipped above that.
 
-Numbers here are single-run and single-threaded. They are for spotting
-order-of-magnitude differences between the variants, not for a paper table.
+Numbers here are single-run. Pass ``--workers`` to compare thread counts; the
+quality columns are expected to be byte-identical across them, so a change
+there is a bug, not a tuning result. These are for spotting order-of-magnitude
+differences between the variants, not for a paper table.
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ import numpy as np
 import scaffold
 from scaffold.kernels import HAVE_NUMBA
 from scaffold.scoring import ScoreParams, path_scores
+from scaffold.utils.workers import resolve_workers
 
 METHODS = ("greedy", "heap", "batch", "fast", "sample")
 
@@ -47,10 +50,10 @@ def measure_quality(graph, mask):
     )
 
 
-def run_one(graph, method, keep_ratio, seed, repeats):
+def run_one(graph, method, keep_ratio, seed, repeats, workers=None):
     """Time ``repeats`` runs after one warm-up, and return the best."""
     call = lambda: scaffold.sparsify(  # noqa: E731
-        graph, method=method, keep_ratio=keep_ratio, seed=seed
+        graph, method=method, keep_ratio=keep_ratio, seed=seed, workers=workers
     )
     result = call()          # warm-up: absorbs the one-off numba JIT cost
     if method == "sample":
@@ -75,11 +78,20 @@ def main():
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--skip", nargs="*", default=[], choices=METHODS)
     parser.add_argument("--quality-max-edges", type=int, default=5000)
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="Worker threads per run (default: resolved from the environment, "
+             "capped at 8). Pass 1 for serial timings.",
+    )
     args = parser.parse_args()
 
     methods = [m for m in METHODS if m not in args.skip]
+    workers = resolve_workers(args.workers)
     print(f"numba: {HAVE_NUMBA}   keep_ratio: {args.keep_ratio}   "
-          f"best of {args.repeats} after one warm-up\n")
+          f"workers: {workers}   best of {args.repeats} after one warm-up")
+    print("Quality columns must not move with --workers; only the timings may.\n")
 
     for side in args.sizes:
         graph = scaffold.grid_graph(side, side)
@@ -100,7 +112,8 @@ def main():
         for method in methods:
             try:
                 result, seconds = run_one(
-                    graph, method, args.keep_ratio, args.seed, args.repeats
+                    graph, method, args.keep_ratio, args.seed, args.repeats,
+                    workers=workers,
                 )
             except Exception as exc:  # a variant may simply be too slow to finish
                 print(f"  {method:8s} failed: {type(exc).__name__}: {exc}")

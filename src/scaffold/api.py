@@ -200,9 +200,15 @@ def fast(
     root-prefix sums -- no shortest-path search anywhere -- then takes the top
     of the budget. **Use this one** unless you have a specific reason not to.
 
-    Extra options: ``weighted_paths`` and ``return_scores``. ``selection`` is
-    retained only as a compatibility check and must be ``"topk"``; use
-    :func:`batch` for sampled-batch growth.
+    Extra options: ``weighted_paths``, ``return_scores`` and ``workers``.
+    ``selection`` is retained only as a compatibility check and must be
+    ``"topk"``; use :func:`batch` for sampled-batch growth.
+
+    ``workers`` parallelizes the scoring pass over the candidate set and is
+    where nearly all of Fast's time goes. It defaults to
+    ``min(8, cpus)``, honouring ``SCAFFOLD_NUM_WORKERS`` and
+    ``OMP_NUM_THREADS``; pass ``workers=1`` to force serial execution or
+    ``workers="all"`` for every core. Results are identical either way.
 
     Examples
     --------
@@ -243,7 +249,11 @@ def sample(
     Extra options: ``tree_count`` (number of random forests to aggregate over),
     ``aggregate_lambda`` (score-vs-frequency mix), ``backbone``
     (``"fixed-maxst"``, ``"fixed-randst"``, or ``"rotate-randst"``),
-    ``weighted_paths``.
+    ``weighted_paths``, ``workers``.
+
+    The precompute scores ``tree_count`` independent backbones, so ``workers``
+    buys close to linear speed-up here -- it is the most parallel of the five.
+    Draws are already cheap and stay serial.
 
     Examples
     --------
@@ -270,6 +280,7 @@ def sample(
         "delta_min": float(sampler.delta_min),
         "mandatory_edges": int(sampler.mandatory.sum()),
         "backbone_edges": int(sampler.det_forest.sum()),
+        "workers": int(sampler.workers),
         "runtime": float(sampler.build_seconds),
         "default_keep_ratio": keep_ratio,
         "default_num_edges": num_edges,
