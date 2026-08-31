@@ -562,8 +562,14 @@ def _heap_push(heap_dist, heap_node, size, dist, node):
             heap_dist[parent] == heap_dist[i] and heap_node[parent] <= heap_node[i]
         ):
             break
-        td = heap_dist[parent]; heap_dist[parent] = heap_dist[i]; heap_dist[i] = td
-        tn = heap_node[parent]; heap_node[parent] = heap_node[i]; heap_node[i] = tn
+        # Explicit three-step swaps: numba does not lower tuple-unpacking
+        # assignment on array elements the way CPython does.
+        td = heap_dist[parent]
+        heap_dist[parent] = heap_dist[i]
+        heap_dist[i] = td
+        tn = heap_node[parent]
+        heap_node[parent] = heap_node[i]
+        heap_node[i] = tn
         i = parent
     return size + 1
 
@@ -596,8 +602,12 @@ def _heap_pop(heap_dist, heap_node, size):
             and heap_node[i] <= heap_node[smallest]
         ):
             break
-        td = heap_dist[smallest]; heap_dist[smallest] = heap_dist[i]; heap_dist[i] = td
-        tn = heap_node[smallest]; heap_node[smallest] = heap_node[i]; heap_node[i] = tn
+        td = heap_dist[smallest]
+        heap_dist[smallest] = heap_dist[i]
+        heap_dist[i] = td
+        tn = heap_node[smallest]
+        heap_node[smallest] = heap_node[i]
+        heap_node[i] = tn
         i = smallest
     return top_dist, top_node, size
 

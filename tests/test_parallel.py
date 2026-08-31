@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 
 import scaffold
+from conftest import ALL_METHODS, sparsify_any
 from scaffold.kernels import build_tree_index, spanning_forest_mask, tree_lca
 from scaffold.scoring import ScoreParams, tree_scores
 from scaffold.utils.workers import (
@@ -24,9 +25,17 @@ from scaffold.utils.workers import (
     split_workers,
 )
 
-from conftest import ALL_METHODS, sparsify_any
-
 WORKER_COUNTS = (1, 2, 4, 8)
+
+
+def expected(requested):
+    """What ``resolve_workers`` should return for an explicit request.
+
+    Requests are clamped to the affinity mask, so a test that hard-codes the
+    number it asked for passes on a workstation and fails on a two-core CI
+    runner. Every assertion about a resolved count goes through this.
+    """
+    return min(requested, available_cpus())
 
 
 # ----------------------------------------------------------------------
@@ -35,19 +44,19 @@ WORKER_COUNTS = (1, 2, 4, 8)
 def test_explicit_workers_beats_every_environment_variable(monkeypatch):
     monkeypatch.setenv("SCAFFOLD_NUM_WORKERS", "7")
     monkeypatch.setenv("OMP_NUM_THREADS", "5")
-    assert resolve_workers(2) == 2
+    assert resolve_workers(2) == expected(2)
 
 
 def test_scaffold_variable_beats_omp(monkeypatch):
     monkeypatch.setenv("SCAFFOLD_NUM_WORKERS", "3")
     monkeypatch.setenv("OMP_NUM_THREADS", "5")
-    assert resolve_workers(None) == min(3, available_cpus())
+    assert resolve_workers(None) == expected(3)
 
 
 def test_omp_is_honoured_when_scaffold_variable_is_absent(monkeypatch):
     monkeypatch.delenv("SCAFFOLD_NUM_WORKERS", raising=False)
     monkeypatch.setenv("OMP_NUM_THREADS", "2")
-    assert resolve_workers(None) == min(2, available_cpus())
+    assert resolve_workers(None) == expected(2)
 
 
 def test_default_is_capped_rather_than_taking_the_whole_node(monkeypatch):
@@ -55,7 +64,7 @@ def test_default_is_capped_rather_than_taking_the_whole_node(monkeypatch):
     monkeypatch.delenv("SCAFFOLD_NUM_WORKERS", raising=False)
     monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
     resolved = resolve_workers(None)
-    assert resolved == min(DEFAULT_WORKER_CAP, available_cpus())
+    assert resolved == expected(DEFAULT_WORKER_CAP)
     assert resolved <= DEFAULT_WORKER_CAP
 
 
@@ -63,7 +72,7 @@ def test_default_is_capped_rather_than_taking_the_whole_node(monkeypatch):
 def test_auto_spellings_all_resolve(monkeypatch, spelling):
     monkeypatch.delenv("SCAFFOLD_NUM_WORKERS", raising=False)
     monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
-    assert resolve_workers(spelling) == min(DEFAULT_WORKER_CAP, available_cpus())
+    assert resolve_workers(spelling) == expected(DEFAULT_WORKER_CAP)
 
 
 @pytest.mark.parametrize("spelling", [-1, "all"])
@@ -83,7 +92,7 @@ def test_garbage_worker_values_are_rejected():
 def test_malformed_environment_values_fall_through(monkeypatch):
     monkeypatch.setenv("SCAFFOLD_NUM_WORKERS", "not-a-number")
     monkeypatch.setenv("OMP_NUM_THREADS", "3")
-    assert resolve_workers(None) == min(3, available_cpus())
+    assert resolve_workers(None) == expected(3)
 
 
 def test_split_workers_never_oversubscribes():
@@ -275,8 +284,9 @@ def test_more_backbones_than_workers_still_scores_every_one(grid):
 
 
 def test_resolved_worker_count_is_reported(grid):
-    assert scaffold.fast(grid, keep_ratio=0.75, workers=3).metadata["workers"] == 3
-    assert scaffold.sample(grid, seed=0, workers=3).metadata["workers"] == 3
+    want = expected(3)
+    assert scaffold.fast(grid, keep_ratio=0.75, workers=3).metadata["workers"] == want
+    assert scaffold.sample(grid, seed=0, workers=3).metadata["workers"] == want
 
 
 # ----------------------------------------------------------------------
