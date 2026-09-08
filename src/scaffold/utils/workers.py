@@ -38,12 +38,9 @@ __all__ = ["available_cpus", "resolve_workers", "parallel_threads", "split_worke
 DEFAULT_WORKER_CAP = 8
 _ENV_VARS = ("SCAFFOLD_NUM_WORKERS", "OMP_NUM_THREADS")
 
-# numba.set_num_threads mutates process-global state, so two Python threads
-# entering parallel_threads() at once would clobber each other's setting. The
-# depth counter makes the outermost scope the only one that touches it.
-_THREAD_LOCK = threading.Lock()
-_PIN_DEPTH = 0
-_PIN_PREVIOUS = None
+# Numba's thread mask belongs to the calling Python thread. A shared depth
+# counter would leave concurrent pool tasks at their default thread count.
+_THREAD_STATE = threading.local()
 
 
 def available_cpus() -> int:
@@ -128,16 +125,9 @@ def parallel_threads(workers: int):
     fixed when the threading layer first launches, so the request is clamped
     rather than allowed to raise.
 
-    Only the *outermost* entry changes anything; nested entries -- including
-    entries from worker threads of an enclosing pool -- see the pin already in
-    place and leave it alone. That nesting rule is what lets an algorithm split
-    its budget between an outer task pool and inner numba threads: the outer
-    scope pins once, and the per-task calls underneath do not fight over the
-    setting.
-
-    The lock is held only across the counter update, never across the body. An
-    earlier version wrapped the whole block, which quietly serialized every
-    thread of SCAFFOLD-Sample's backbone pool -- correct results, no speedup.
+    Each pool task must enter its own scope. Nested scopes on the same thread
+    may lower the budget, but cannot exceed their parent's limit. Both the
+    previous mask and the enclosing budget are restored, including on error.
     """
     workers = max(1, int(workers))
     if _numba is None:
@@ -147,22 +137,14 @@ def parallel_threads(workers: int):
     ceiling = int(_numba.config.NUMBA_NUM_THREADS)
     target = max(1, min(workers, ceiling))
 
-    global _PIN_DEPTH, _PIN_PREVIOUS
-    with _THREAD_LOCK:
-        outermost = _PIN_DEPTH == 0
-        if outermost:
-            try:
-                _PIN_PREVIOUS = int(_numba.get_num_threads())
-            except Exception:  # pragma: no cover - very old numba
-                _PIN_PREVIOUS = ceiling
-            _numba.set_num_threads(target)
-        else:
-            target = int(_numba.get_num_threads())
-        _PIN_DEPTH += 1
+    parent = getattr(_THREAD_STATE, "limit", None)
+    if parent is not None:
+        target = min(target, parent)
+    previous = int(_numba.get_num_threads())
+    _numba.set_num_threads(target)
+    _THREAD_STATE.limit = target
     try:
         yield target
     finally:
-        with _THREAD_LOCK:
-            _PIN_DEPTH -= 1
-            if _PIN_DEPTH == 0:
-                _numba.set_num_threads(_PIN_PREVIOUS)
+        _numba.set_num_threads(previous)
+        _THREAD_STATE.limit = parent
