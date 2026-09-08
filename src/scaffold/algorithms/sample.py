@@ -60,6 +60,7 @@ from ..kernels import (
 from ..scoring import ScoreParams, tree_scores
 from ..utils.validation import connectivity_floor, resolve_budget
 from ..utils.workers import parallel_threads, resolve_workers, split_workers
+from ._sampling import systematic_positions
 
 DEFAULT_TREE_COUNT = 8
 DEFAULT_LAMBDA = 1.0
@@ -240,17 +241,11 @@ class ScaffoldSampler:
 
 
         if outer > 1:
-            # Pin the inner thread count *outside* the pool, so each worker
-            # thread's tree_scores call finds the pin already in place rather
-            # than racing to reset a process-global.
-            with parallel_threads(inner), ThreadPoolExecutor(
-                max_workers=outer
-            ) as pool:
+            # Each task passes its inner budget to tree_scores, which sets
+            # the calling thread's mask before entering a parallel kernel.
+            with ThreadPoolExecutor(max_workers=outer) as pool:
                 results = list(pool.map(score_forest, range(self.tree_count)))
         else:
-            # No pool, so nothing to protect -- and pinning here would override
-            # each tree_scores call's own decision to drop to one thread on a
-            # small candidate set, since a nested pin is a no-op by design.
             results = [score_forest(r) for r in range(self.tree_count)]
 
         accumulated = np.zeros(m, dtype=np.float64)
@@ -283,7 +278,8 @@ class ScaffoldSampler:
         # --- tree-locality ordering ----------------------------------------
         det_depth, det_root, det_up = det_index[0], det_index[1], det_index[2]
         det_tin = det_index[4]
-        lca = tree_lca(src, dst, det_depth, det_root, det_up)
+        with parallel_threads(self.workers):
+            lca = tree_lca(src, dst, det_depth, det_root, det_up)
         key = np.where(lca >= 0, det_tin[np.maximum(lca, 0)], np.int64(-1))
         order = np.lexsort((np.arange(m, dtype=np.int64), key)).astype(np.int64)
 
@@ -471,18 +467,23 @@ class ScaffoldSampler:
                 "aggregate_lambda": float(self.aggregate_lambda),
                 "runtime": float(time.perf_counter() - start),
                 "precompute_seconds": float(self.build_seconds),
+                "workers": int(self.workers),
+                "draw_workers_used": int(self._draw_workers_used),
+                "draw_parallelism": "systematic_tick_blocks",
             },
         )
 
     def _draw_pool(self, plan, rng) -> np.ndarray:
         """Systematic ``pi``-ps: exactly ``k`` edges with exact marginals."""
+        self._draw_workers_used = 1
         remaining = plan["remaining"]
         if remaining <= 0:
             return np.zeros(0, dtype=np.int64)
         cum = plan["cum"]
-        ticks = float(rng.random()) + np.arange(remaining, dtype=np.float64)
-        pos = np.searchsorted(cum, ticks, side="left")
-        pos = np.unique(np.minimum(pos, cum.size - 1))
+        pos, self._draw_workers_used = systematic_positions(
+            cum, float(rng.random()), remaining, self.workers
+        )
+        pos = np.unique(pos)
         if pos.size < remaining:
             # Float-boundary degeneracy when many p_e == 1. Top up with the
             # highest-weight unselected pool entries so the budget stays exact.

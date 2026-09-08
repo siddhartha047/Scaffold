@@ -21,6 +21,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Large systematic Sample draws now use compiled parallel tick blocks. The
+  cumulative sum, random offset, and boundary correction remain unchanged;
+  selected edges are identical across worker counts. Draw metadata records
+  the sampling kernel's worker budget separately from precompute time.
+- Greedy, Heap, and Batch path scoring now reduce the actual Numba thread
+  mask for small candidate sets and bound it by the number of source groups.
+- Numba masks are now set and restored per calling thread. Concurrent
+  backbone scorers each honor their inner budget, nested scopes can reduce
+  that budget, and Sample's locality-ordering LCA pass honors `workers` too.
+
 - **Tree scorer (`fast`, `sample`) parallelized over candidates.** The LCA
   queries and per-candidate term assembly moved into fused `prange` kernels,
   replacing a chain of NumPy temporaries. ~3x on 8 threads, and ~1.4x even

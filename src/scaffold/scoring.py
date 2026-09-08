@@ -55,6 +55,7 @@ from typing import Dict, Optional
 import numpy as np
 
 from .kernels import (
+    PARALLEL_PATH_MIN_CANDIDATES,
     PARALLEL_TREE_MIN_CANDIDATES,
     _bfs_parents_kernel,
     _edge_congestion_kernel,
@@ -485,17 +486,25 @@ class PathScorer:
         order = np.argsort(sources, kind="stable")
         ordered_ids = candidate_ids[order]
 
-        with parallel_threads(self.workers):
+        # Bound the actual thread mask, not just the number of scratch blocks.
+        # Heap often refreshes tiny sets: launching a full numba team for one
+        # source wastes the budget even though the kernel has only one task.
+        ordered_sources = np.ascontiguousarray(sources[order])
+        source_count = 1 + int(np.count_nonzero(ordered_sources[1:] != ordered_sources[:-1]))
+        path_workers = min(self.workers, source_count)
+        if n_cand < PARALLEL_PATH_MIN_CANDIDATES:
+            path_workers = 1
+        with parallel_threads(path_workers):
             (
                 reached, distance, edge_count,
                 edge_flat, edge_offset, node_flat, node_offset,
             ) = multi_source_paths(
                 self.num_nodes,
                 self._rowptr, self._col, self._eid,
-                np.ascontiguousarray(sources[order]),
+                ordered_sources,
                 np.ascontiguousarray(self.dst[ordered_ids]),
                 weight=self.weight,
-                workers=self.workers,
+                workers=path_workers,
             )
 
             connected[order] = reached

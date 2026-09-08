@@ -345,21 +345,24 @@ on one node slow each other down badly; to run a batch, cap them together:
 OMP_NUM_THREADS=4 python train.py &   # four jobs, four threads each
 ```
 
-What actually runs in parallel, measured on 8 threads:
+The parallel work differs by method:
 
-| | parallel over | speed-up |
+| Method | Parallel work | Work that remains sequential |
 |---|---|---|
-| `fast`, `sample` | candidates within one scoring pass | ~3x |
-| `sample` precompute | that, plus the `tree_count` backbones | ~2.8x |
-| `greedy`, `heap`, `batch` | candidate source groups in the path scorer | 2.5-3.4x end to end |
+| `fast` | LCA queries and candidate scoring | Forest construction, prefix reductions, selection |
+| `sample` precompute | Independent backbones and candidate scoring | Deterministic accumulation and ordering |
+| `sample` draw | Independent blocks of systematic sampling ticks | Cumulative probabilities, duplicate correction, connectivity check |
+| `greedy`, `heap`, `batch` | Compiled BFS/Dijkstra searches by candidate source and path norms | Growth rounds, graph/heap updates, congestion reduction |
 
-The path-based variants gained much more than threading alone would give: their
-inner loop was rewritten as compiled kernels first. On a weighted graph, where
-the old scorer ran Python's `heapq` Dijkstra, scoring is ~40x faster at 8
-threads; unweighted, ~8x.
+Thread budgets are enforced in each calling thread, including nested
+precompute tasks. Sample draw metadata includes `draw_workers_used`, the
+kernel's configured worker budget; it is not a measurement of CPU utilization.
+The sampled edges do not change with the worker count. Parallel execution
+does not guarantee linear speed-up or that the largest CPU count is fastest.
 
 Small graphs fall back to serial automatically -- below a few hundred
-candidates the thread dispatch costs more than the work.
+candidates the path scorer uses one thread. Sample uses NumPy for fewer than
+32,768 ticks and compiled blocks for larger draws.
 
 Numba is required for any of this. Without it the kernels still run, as plain
 Python loops, and `workers` has no effect.
