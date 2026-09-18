@@ -30,6 +30,10 @@ sparse = result.to_pyg()          # or .to_networkx(), .to_scipy(), .to_torch()
 `G` can be a NetworkX graph, a PyTorch Geometric `Data`, a `scipy.sparse`
 matrix, or a plain `(2, m)` `edge_index` array.
 
+[Visual demos](#visual-demos) · [Algorithms](#the-five-algorithms) ·
+[Usage](#standalone-usage) · [Backbones](#support-backbones) ·
+[Installation](#installation)
+
 ---
 
 ## The five algorithms
@@ -96,40 +100,92 @@ graph families, including the case where `fast` looks bad.
 
 ---
 
-## See it work
+## Visual demos
 
-A 12×12 lattice has no communities, no hubs and no important edges — every edge
-is equivalent by symmetry. So whatever survives sparsification is the
-*algorithm's* preference, not the graph's structure.
+These simulations use a **12×12 grid: 144 nodes and 264 undirected edges**.
+The regular layout makes supporting paths and omitted edges easy to inspect.
+All comparisons use seed 0; the figures below use multiple rows and larger
+panel labels so they remain readable in the repository view.
+
+### Choose a support backbone
+
+Every backbone below preserves connectivity with **143 edges**. The new
+**local-search low-stretch backbone (`llst`)** refines GLST through improving
+cycle swaps. Here, it reduces omitted-edge stretch from **1,161 to 795
+(31.5%)**, without changing the edge count. LLST is a backbone option for
+Greedy, Heap, Batch, and Fast.
+
+![Input grid and seven support backbones in a two-row comparison, including LLST](docs/images/grid_backbones.png)
+
+The GIF gives a closer view of each completed forest and finishes with LLST.
+Blue edges are retained; gray dashed edges are omitted.
+
+![Animated comparison of seven support backbones, ending with LLST](docs/images/grid_backbones.gif)
+
+The LLST example uses its default GLST initializer and up to 10 exhaustive
+search passes. See the [measured results](docs/images/grid_backbones.json) and
+[backbone guide](docs/backbones.md#llst) for settings and sampled search options.
+
+### Compare the five algorithms
+
+At target retention **72%**, every method keeps **191 edges**. The 2×3 grid
+shows the input and all five outputs. Pale red marks their shared seeded
+`randst` backbone; bold blue marks the edges each method adds.
+
+![Input and five Scaffold outputs in a two-by-three grid at the same edge budget](docs/images/grid_methods.png)
+
+### Resample a sparse view each epoch
+
+`scaffold.sample` computes edge weights once, then draws a new support at each
+epoch. The animation shows the input, the current sparse view, the cumulative
+union, and its coverage curve in a **2×2 grid**. Every view has 191 edges and
+remains connected; the accumulated union records what training has seen.
+This run reaches **100% cumulative coverage** within 50 epochs.
+
+![Animated two-by-two view of sparse draws and cumulative coverage over 50 epochs](docs/images/grid_coverage.gif)
+
+<details>
+<summary>Inspect the sampling weights and static coverage snapshots</summary>
+
+The weight and probability panels use separate color scales. Edges with
+inclusion probability `p = 1` appear in every draw. The final panel shows one
+exact-budget support.
+
+![Input, sampling weights, inclusion probabilities, and one draw in a two-by-two grid](docs/images/grid_scores.png)
+
+The snapshots show cumulative coverage after 1, 3, and 10 epochs. The curve
+compares repeated draws with a single fixed support through epoch 50.
+
+![Coverage snapshots and the coverage curve in a two-by-two grid](docs/images/grid_coverage.png)
+
+</details>
+
+### Reduce the edge budget
+
+This grid compares Scaffold-Fast at five retention ratios. Connectivity is
+preserved while the budget can hold a spanning tree. This graph requires at
+least **143 retained edges (54.2% of its edges)**; smaller budgets must
+disconnect it.
+
+![Input and five retention ratios in a two-by-three grid](docs/images/grid_ratios.png)
+
+### Reproduce the demos
+
+From a checkout of this repository:
 
 ```bash
+pip install -e ".[viz,speed]"
 python examples/01_grid_demo.py --out docs/images
+
+# Regenerate one comparison, including its GIF when available:
+python examples/01_grid_demo.py --only backbones --out docs/images
+python examples/01_grid_demo.py --only coverage --out docs/images
 ```
 
-**The five methods at the same budget.** Pale red is a shared seeded `randst`
-backbone (free — it is what guarantees connectivity); bold blue is what each
-method chose to buy with the rest of the budget.
-
-![the five methods on a grid](docs/images/grid_methods.png)
-
-**`scaffold.sample` returns weights, not a subgraph.** Left: the
-ratio-independent weight `π` for every edge. Middle: inclusion probabilities at
-a 72% budget — yellow edges have `p = 1` and appear in *every* draw. Right: one
-draw.
-
-![sample weights on a grid](docs/images/grid_scores.png)
-
-**Why that matters for training.** Any single sparsifier shows the model 72% of
-the graph and permanently discards the rest. Redrawing each epoch shows it
-nearly all of the graph, while every individual view stays small.
-
-![coverage over training](docs/images/grid_coverage.png)
-
-**Support backbones.** Every run starts from a spanning forest; which one
-changes the character of the result. The randomized panels show the new
-allocation-free `fast-randst` beside the fully shuffled `randst`.
-
-![backbones](docs/images/grid_backbones.png)
+The generator writes five PNGs, two GIFs, and the
+[backbone](docs/images/grid_backbones.json) and
+[resampling](docs/images/grid_coverage.json) measurements. These are illustrative
+grid simulations; their quality rankings need not hold on other graphs.
 
 ---
 
@@ -179,6 +235,23 @@ result = scaffold.fast(edge_index, keep_ratio=0.2)
 ```
 
 Full walkthrough: [`examples/02_standalone.py`](https://github.com/siddhartha047/Scaffold/blob/main/examples/02_standalone.py).
+
+For small graphs, the research local-search low-stretch tree is available as
+`backbone="llst"` (requires `pip install "scaffold-sparse[networkx]"`). It
+refines an initial tree through improving cycle-edge swaps before Scaffold
+adds the remaining budget:
+
+```python
+result = scaffold.fast(
+    G, keep_ratio=0.7, backbone="llst", seed=0,
+    backbone_options={"init_support": "maxst", "max_passes": 5},
+)
+```
+
+Greedy, Heap and Batch accept the same backbone options. See
+[`docs/backbones.md`](docs/backbones.md#llst) for the exact and sampled LLST
+settings, and [`examples/05_local_search_backbone.py`](examples/05_local_search_backbone.py)
+for a standalone forest example.
 
 ---
 
@@ -262,7 +335,8 @@ the connectivity guarantee possible.
 | `fast-randst` | Seeded coprime-stride random scan. No full permutation allocation; fastest randomized backbone. |
 | `randst` | Kruskal on a full random permutation. Better mixing than `fast-randst`, but slower and uses an `O(m)` order array. |
 | `spt` | Multi-source BFS forest. Low diameter. |
-| `glst` | Greedy low-stretch tree. Best quality, `O(n·m·|cut|)` — small graphs only. |
+| `glst` | Greedy low-stretch tree, `O(n·m·|cut|)` — small graphs only. |
+| `llst` | Local-search low-stretch forest. Refines GLST (or another initializer) with improving cycle swaps; exact and sampled search options. Requires NetworkX; intended for small graphs. |
 | `none` | No backbone. Connectivity is then *not* guaranteed. |
 
 ```python
@@ -416,7 +490,7 @@ pytest
 | [`docs/backbones.md`](https://github.com/siddhartha047/Scaffold/blob/main/docs/backbones.md) | Choosing and writing support backbones |
 | [`docs/pytorch-geometric.md`](https://github.com/siddhartha047/Scaffold/blob/main/docs/pytorch-geometric.md) | GNN integration in depth |
 | [`docs/validation.md`](https://github.com/siddhartha047/Scaffold/blob/main/docs/validation.md) | Real Cora parity with the research implementation |
-| [`examples/`](https://github.com/siddhartha047/Scaffold/tree/main/examples) | Four runnable walkthroughs |
+| [`examples/`](https://github.com/siddhartha047/Scaffold/tree/main/examples) | Five runnable walkthroughs, including LLST and the visual demos |
 
 ## Citing
 

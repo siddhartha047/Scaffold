@@ -130,8 +130,12 @@ def draw_graph(
             )
         )
     ax.scatter(
-        positions[:, 0], positions[:, 1],
-        s=node_size, c="#22262e", zorder=4, linewidths=0,
+        positions[:, 0],
+        positions[:, 1],
+        s=node_size,
+        c="#22262e",
+        zorder=4,
+        linewidths=0,
     )
     _finish(ax, positions, title)
     return ax
@@ -159,12 +163,14 @@ def compare_methods(
     backbone=None,
     show_backbone: bool = True,
     figsize=None,
+    ncols: int = 3,
     **kwargs,
 ):
-    """Side-by-side panel: the input graph, then one panel per method.
+    """Grid comparison: the input graph, then one panel per method.
 
     Returns ``(figure, results)`` where ``results`` maps method name to its
-    :class:`~scaffold.result.ScaffoldResult`.
+    :class:`~scaffold.result.ScaffoldResult`. ``ncols`` defaults to three;
+    set it to ``1 + len(methods)`` for a single row.
     """
     import matplotlib.pyplot as plt
 
@@ -176,9 +182,15 @@ def compare_methods(
     backbone = DEFAULT_BACKBONE if backbone is None else backbone
     backbone_name = canonical_backbone_name(backbone)
     panels = 1 + len(methods)
-    figsize = figsize or (3.4 * panels, 3.8)
-    fig, axes = plt.subplots(1, panels, figsize=figsize)
-    axes = np.atleast_1d(axes)
+    if int(ncols) != ncols or ncols < 1:
+        raise ValueError("ncols must be a positive integer")
+    ncols = min(int(ncols), panels)
+    nrows = (panels + ncols - 1) // ncols
+    figsize = figsize or (3.8 * ncols, 4.2 * nrows)
+    fig, axes = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
+    axes = axes.ravel()
+    for ax in axes[panels:]:
+        ax.set_visible(False)
 
     draw_graph(
         graph,
@@ -270,8 +282,7 @@ def draw_edge_scores(
     values = np.asarray(scores, dtype=float).reshape(-1)
     if values.size != graph.num_edges:
         raise ValueError(
-            f"expected one score per undirected edge ({graph.num_edges}), "
-            f"got {values.size}"
+            f"expected one score per undirected edge ({graph.num_edges}), got {values.size}"
         )
     finite = values[np.isfinite(values)]
     ceiling = float(finite.max()) if finite.size else 1.0
@@ -285,9 +296,7 @@ def draw_edge_scores(
         zorder=2,
     )
     ax.add_collection(collection)
-    ax.scatter(
-        positions[:, 0], positions[:, 1], s=12, c="#22262e", zorder=3, linewidths=0
-    )
+    ax.scatter(positions[:, 0], positions[:, 1], s=12, c="#22262e", zorder=3, linewidths=0)
     if colorbar:
         ax.figure.colorbar(collection, ax=ax, fraction=0.046, pad=0.04, label=label)
     _finish(ax, positions, title)

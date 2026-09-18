@@ -8,6 +8,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `backbone="llst"`: the research local-search low-stretch forest, available
+  to Greedy, Heap, Batch and Fast through `backbone_options`. Includes exact
+  improving cycle swaps, random/tree-distance candidate selection, sampled
+  objectives and cycles, and the research initializers (including private
+  RandSPT initialization). Requires the optional NetworkX extra, not PyTorch.
+- LLST property tests, a standalone example, and an 84-case comparison with
+  the research implementation on exact, sampled, weighted and disconnected cases.
+- LLST in the README grid-backbone visualization and backbone-tuning example,
+  with larger panel labels, an animated GIF comparison, measured stretch,
+  reproducible JSON results, and `--only backbones` for regenerating the
+  comparison independently of the other demo figures.
+- README demo gallery with visible backbone and resampling GIFs, larger labels,
+  2×3 method/budget comparisons, and 2×2 sampling/coverage figures. The
+  resampling simulation records every draw in `grid_coverage.json`.
+
 - **`workers` on all five algorithms.** Resolved from the argument, then
   `SCAFFOLD_NUM_WORKERS`, then `OMP_NUM_THREADS`, then `min(8, cpus)`. The cap
   is deliberate: several unthrottled jobs on one node slow each other down far
@@ -20,6 +35,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `--workers` on `benchmarks/bench_methods.py`.
 
 ### Changed
+
+- `viz.compare_methods` now defaults to a three-column grid; `ncols` selects
+  a different layout, including a single row.
+- GLST now uses weighted path lengths on weighted inputs, matching the research
+  initializer used by LLST; previously its projected stretch used hop counts.
 
 - Large systematic Sample draws now use compiled parallel tick blocks. The
   cumulative sum, random offset, and boundary correction remain unchanged;

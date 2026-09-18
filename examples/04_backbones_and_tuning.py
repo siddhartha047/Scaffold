@@ -36,14 +36,13 @@ section("1. The available backbones")
 print(f"  {scaffold.available_backbones()}\n")
 print(f"  {'backbone':12s} {'forest':>7s} {'stretch':>10s} {'edges':>7s} {'comp':>5s}")
 print(f"  {'-' * 12} {'-' * 7} {'-' * 10} {'-' * 7} {'-' * 5}")
-for name in (
-    "fast-maxst", "maxst", "mst", "fast-randst", "randst", "spt", "glst"
-):
+for name in ("fast-maxst", "maxst", "mst", "fast-randst", "randst", "spt", "glst", "llst"):
     mask = build_backbone(G, name, seed=0)
     # total_stretch: sum over non-tree edges of dist_T(u,v)/w(e). Lower is a
     # better starting point -- fewer long detours for the growth phase to fix.
     stretch = tree_scores(G.num_nodes, G.src, G.dst, mask)["total_stretch"]
-    result = scaffold.fast(G, keep_ratio=KEEP, backbone=name, seed=0)
+    # Reuse exactly the forest measured above, including LLST's refinement.
+    result = scaffold.fast(G, keep_ratio=KEEP, backbone=mask, seed=0)
     print(
         f"  {name:12s} {int(mask.sum()):7d} {stretch:10.0f} "
         f"{result.sparse_edges:7d} {result.num_components():5d}"
@@ -53,6 +52,8 @@ print("  to sort by, both fall back to the same deterministic scan. Give the gri
 print("  weights and they diverge.")
 print("  fast-randst avoids constructing randst's full random permutation; it is")
 print("  normally faster, while randst provides a more thoroughly shuffled order.")
+print("  llst refines glst with up to 10 exhaustive improving cycle swaps;")
+print("  its forest has the same edge budget, with shorter total detours.")
 
 
 # ----------------------------------------------------------------------
@@ -104,7 +105,9 @@ def quality(mask):
 baseline = scaffold.fast(G, keep_ratio=KEEP, seed=0).mask
 print("  Measured on the *dropped* edges: how long a detour do they get, and how")
 print("  concentrated is the traffic on the edges that survived?\n")
-print(f"  {'setting':24s} {'mean dil':>9s} {'max dil':>8s} {'max cong':>9s} {'vs default':>11s}")
+print(
+    f"  {'setting':24s} {'mean dil':>9s} {'max dil':>8s} {'max cong':>9s} {'vs default':>11s}"
+)
 print(f"  {'-' * 24} {'-' * 9} {'-' * 8} {'-' * 9} {'-' * 11}")
 for label, knobs in settings:
     result = scaffold.fast(G, keep_ratio=KEEP, seed=0, **knobs)
@@ -137,8 +140,10 @@ section("4. Reusing one scoring pass across many budgets")
 result = scaffold.fast(G, keep_ratio=0.99, seed=0, return_scores=True)
 scores = result.metadata["scores"]
 backbone = build_backbone(G, "fast-maxst", seed=0)
-print(f"  one scoring pass over {G.num_edges} edges "
-      f"({result.metadata['runtime'] * 1000:.1f} ms)\n")
+print(
+    f"  one scoring pass over {G.num_edges} edges "
+    f"({result.metadata['runtime'] * 1000:.1f} ms)\n"
+)
 for ratio in (0.6, 0.7, 0.8, 0.9):
     budget = int(np.ceil(ratio * G.num_edges)) - int(backbone.sum())
     candidates = np.flatnonzero(~backbone)
@@ -146,12 +151,16 @@ for ratio in (0.6, 0.7, 0.8, 0.9):
     mask = backbone.copy()
     mask[candidates[order[:budget]]] = True
     direct = scaffold.fast(G, keep_ratio=ratio, seed=0).mask
-    print(f"  keep_ratio={ratio:.2f}: {int(mask.sum()):4d} edges, "
-          f"identical to a fresh run: {np.array_equal(mask, direct)}")
+    print(
+        f"  keep_ratio={ratio:.2f}: {int(mask.sum()):4d} edges, "
+        f"identical to a fresh run: {np.array_equal(mask, direct)}"
+    )
 
 
 # ----------------------------------------------------------------------
 section("5. Registering a custom backbone")
+
+
 # ----------------------------------------------------------------------
 def star_forest(graph, max_edges=None, seed=None, **_):
     """A silly backbone: greedily attach each node to its lowest-id neighbour."""
