@@ -3,6 +3,10 @@
 Run after installing scaffold-sparse[networkx]::
 
     python examples/05_local_search_backbone.py
+
+LLST is a small-graph reference and rejects inputs above 1,000 undirected
+edges by default. Use randst, fast-randst, or fast-maxst for larger graphs;
+see docs/backbones.md for the deliberate max_input_edges override.
 """
 
 from __future__ import annotations

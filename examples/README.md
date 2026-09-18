@@ -24,6 +24,9 @@ python examples/05_local_search_backbone.py
 A 2-D lattice has a regular layout that makes supporting paths, omitted edges,
 and differences between backbones easy to inspect. The examples use the same
 graph and seed so that the effects of each method are visible.
+The method, smaller-budget, and sampling demos share a seeded `randst`
+backbone (`fixed-randst` for Sample). The backbone comparison still shows
+each named construction.
 
 `01_grid_demo.py` writes five PNG figures and two GIFs to `docs/images/`:
 
@@ -50,9 +53,15 @@ use the same graph and seed; LLST preserves the forest size while reducing
 the total stretch of its initializer. Exact LLST adds computation to these
 small-grid examples; the other four figures can be regenerated separately
 with `--only methods`, `--only ratios`, `--only scores`, or `--only coverage`.
+The script rejects a backbone comparison above 1,000 undirected input edges
+before building any trees, because LLST's runtime can be very large. For
+larger grids, choose one of those RandST demos. The LLST API has an explicit
+`max_input_edges` override for deliberate experiments; see
+[the backbone guide](../docs/backbones.md#llst).
 
 `--only coverage` generates both the static coverage grid and the resampling
-animation. `grid_coverage.json` records all 50 draws, their component counts,
-and cumulative coverage; the GIF shows every early epoch and selected later
-epochs. It depicts actual sampled supports, with the same edge budget in every
+animation. `grid_coverage.json` records the RandST mode and backbone edge IDs,
+all 50 draws, their component counts, and cumulative coverage; the GIF shows
+every early epoch and selected later epochs. It depicts actual sampled
+supports, with the same edge budget in every
 frame. The backbone GIF instead compares completed forests.

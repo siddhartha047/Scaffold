@@ -6,6 +6,8 @@ Run::
 
 Why a grid? Its regular layout makes retained paths and omitted edges easy
 to compare, without the visual clutter of a large irregular graph.
+The method, budget, and sampling demos share a seeded RandST backbone;
+the backbone comparison shows each named construction separately.
 
 Produces five grid figures, backbone and resampling GIFs, and measurements in
 ``grid_backbones.json`` and ``grid_coverage.json``:
@@ -27,13 +29,14 @@ import numpy as np
 
 import scaffold
 from scaffold import viz
-from scaffold.backbone import build_backbone
+from scaffold.backbone import DEFAULT_LLST_MAX_INPUT_EDGES, build_backbone
 from scaffold.scoring import tree_scores
 
 ROWS = COLS = 12
 KEEP_RATIO = 0.72  # a 12x12 grid needs 143/264 = 0.542 just to stay connected
 SEED = 0
-METHODS_FIGURE_BACKBONE = "randst"
+DEMO_BACKBONE = "randst"
+SAMPLE_DEMO_BACKBONE = "fixed-randst"
 
 
 def figure_backbones(graph, positions, out_dir):
@@ -278,7 +281,7 @@ def figure_methods(graph, positions, out_dir):
         keep_ratio=KEEP_RATIO,
         positions=positions,
         seed=SEED,
-        backbone=METHODS_FIGURE_BACKBONE,
+        backbone=DEMO_BACKBONE,
         ncols=3,
         figsize=(11.4, 8.8),
     )
@@ -294,7 +297,7 @@ def figure_methods(graph, positions, out_dir):
     _grid_heading(
         fig,
         "Five algorithms, one edge budget",
-        f"Target retention {KEEP_RATIO:.0%} · shared {METHODS_FIGURE_BACKBONE} backbone · seed {SEED}",
+        f"Target retention {KEEP_RATIO:.0%} · shared {DEMO_BACKBONE} backbone · seed {SEED}",
         "Pale red: shared backbone. Bold blue: added edges. Gray dashes: omitted edges.",
     )
     path = _save(fig, out_dir, "grid_methods.png")
@@ -313,7 +316,9 @@ def figure_ratios(graph, positions, out_dir):
     axes = axes.ravel()
     _backbone_panel(graph, positions, axes[0], "Input grid", f"{graph.num_edges} edges")
     for ax, ratio in zip(axes[1:], ratios):
-        result = scaffold.fast(graph, keep_ratio=ratio, seed=SEED)
+        result = scaffold.fast(
+            graph, keep_ratio=ratio, backbone=DEMO_BACKBONE, seed=SEED
+        )
         components = result.num_components()
         _backbone_panel(
             graph,
@@ -328,7 +333,7 @@ def figure_ratios(graph, positions, out_dir):
     _grid_heading(
         fig,
         "A smaller edge budget",
-        f"Scaffold-Fast · connectivity floor {delta_min:.1%} · seed {SEED}",
+        f"Scaffold-Fast · RandST backbone · connectivity floor {delta_min:.1%} · seed {SEED}",
         "Below the connectivity floor, an exact-budget support must split into components.",
     )
     return _save(fig, out_dir, "grid_ratios.png")
@@ -338,7 +343,7 @@ def figure_scores(graph, positions, out_dir):
     """scaffold.sample returns weights, not a subgraph."""
     import matplotlib.pyplot as plt
 
-    scores = scaffold.sample(graph, seed=SEED)
+    scores = scaffold.sample(graph, backbone=SAMPLE_DEMO_BACKBONE, seed=SEED)
     probabilities = scores.inclusion_probabilities(keep_ratio=KEEP_RATIO)
 
     fig, axes = plt.subplots(2, 2, figsize=(9.2, 9.2))
@@ -387,7 +392,7 @@ def figure_scores(graph, positions, out_dir):
     _grid_heading(
         fig,
         "Score once, sample repeatedly",
-        "Scaffold-Sample converts edge weights into an exact-budget draw.",
+        "Scaffold-Sample · fixed RandST backbone · exact-budget draws",
         "Weights and probabilities use separate color scales. Blue edges form one draw.",
     )
     print(
@@ -401,7 +406,7 @@ def figure_coverage(graph, positions, out_dir):
     """Any one epoch sees keep_ratio of the graph. Many epochs see nearly all of it."""
     import matplotlib.pyplot as plt
 
-    scores = scaffold.sample(graph, seed=SEED)
+    scores = scaffold.sample(graph, backbone=SAMPLE_DEMO_BACKBONE, seed=SEED)
     seen = np.zeros(graph.num_edges, dtype=bool)
     snapshots = {}
     curve = []
@@ -426,14 +431,14 @@ def figure_coverage(graph, positions, out_dir):
             positions,
             ax,
             f"After {_count_label(epoch, 'epoch')}",
-            f"{int(mask.sum())} / {graph.num_edges} edges seen ({mask.mean():.0%})",
+            f"{int(mask.sum())} / {graph.num_edges} edges seen ({mask.mean():.1%})",
             mask=mask,
         )
     _coverage_curve(axes[-1], curve, curve[0])
     _grid_heading(
         fig,
         "Small views, growing coverage",
-        f"Scaffold-Sample · target retention {KEEP_RATIO:.0%} per epoch · seed {SEED}",
+        f"Scaffold-Sample · RandST backbone · target {KEEP_RATIO:.0%} per epoch · seed {SEED}",
         "Panels show accumulated coverage. Each individual draw still has the same edge budget.",
     )
     path = _save(fig, out_dir, "grid_coverage.png")
@@ -442,6 +447,8 @@ def figure_coverage(graph, positions, out_dir):
         json.dump(
             {
                 "seed": SEED,
+                "backbone": SAMPLE_DEMO_BACKBONE,
+                "backbone_edge_ids": np.flatnonzero(scores.backbone).tolist(),
                 "keep_ratio": KEEP_RATIO,
                 "num_nodes": graph.num_nodes,
                 "num_edges": graph.num_edges,
@@ -494,7 +501,7 @@ def _coverage_curve(ax, curve, fixed_fraction):
     _panel_title(
         ax,
         "Coverage over time",
-        f"{curve[-1]:.0%} seen after {_count_label(len(curve), 'epoch')}",
+        f"{curve[-1]:.1%} seen after {_count_label(len(curve), 'epoch')}",
     )
 
 
@@ -523,14 +530,14 @@ def _animate_coverage(graph, positions, out_dir, draws, unions, curve, component
             positions,
             axes[2],
             "Edges seen so far",
-            f"{int(unions[i].sum())} / {graph.num_edges} edges ({curve[i]:.0%})",
+            f"{int(unions[i].sum())} / {graph.num_edges} edges ({curve[i]:.1%})",
             mask=unions[i],
         )
         _coverage_curve(axes[3], curve[: i + 1], curve[0])
         _grid_heading(
             fig,
             "A fresh sparse view each epoch",
-            f"Scaffold-Sample · target retention {KEEP_RATIO:.0%} · seed {SEED}",
+            f"Scaffold-Sample · RandST backbone · target retention {KEEP_RATIO:.0%} · seed {SEED}",
             "Top right: one sparse draw. Bottom left: its union with all preceding draws.",
         )
         frames.append(_gif_frame(fig))
@@ -561,11 +568,20 @@ def main():
     )
     args = parser.parse_args()
 
+    graph = scaffold.grid_graph(args.rows, args.cols)
+    if args.only in (None, "backbones") and graph.num_edges > DEFAULT_LLST_MAX_INPUT_EDGES:
+        parser.error(
+            f"The LLST backbone demo is limited to {DEFAULT_LLST_MAX_INPUT_EDGES:,} "
+            f"undirected input edges; this grid has {graph.num_edges:,}. "
+            "Exhaustive local search can take many minutes or longer. Use a "
+            "smaller grid, or select a RandST demo with --only methods, "
+            "--only ratios, --only scores, or --only coverage."
+        )
+
     import matplotlib
 
     matplotlib.use("Agg")
 
-    graph = scaffold.grid_graph(args.rows, args.cols)
     positions = scaffold.grid_positions(args.rows, args.cols)
     print(
         f"grid {args.rows}x{args.cols}: {graph.num_nodes} nodes, "

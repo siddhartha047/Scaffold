@@ -49,6 +49,9 @@ def local_search_low_stretch_forest(
 
     This is a small-graph reference: one exhaustive pass can evaluate
     O(m*n) swaps, each rebuilding an index and measuring O(m) stretches.
+    The public ``build_backbone`` entry point rejects inputs above 1,000
+    undirected edges by default, before importing this module. Its
+    ``max_input_edges`` option explicitly raises or lowers that runtime guard.
     """
     search = _LocalSearch(seed=seed, **options)
     if graph.edge_weight is not None and (

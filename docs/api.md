@@ -52,6 +52,10 @@ Built-ins are `fast-maxst` (default), `fast-mst`, `fast-randst`, `maxst`,
 research-configuration spelling of `fast-randst`. `llst` is the local-search
 low-stretch forest for small graphs and requires the NetworkX extra; pass its
 search settings through `backbone_options` (see [LLST options](backbones.md#llst)).
+LLST raises `ValueError` above 1,000 normalized undirected input edges to
+avoid unexpectedly long runs. Use `randst`, `fast-randst`, or `fast-maxst`
+for larger inputs, or explicitly raise LLST's positive-integer
+`backbone_options["max_input_edges"]` limit.
 
 ### Objective knobs (all variants)
 
