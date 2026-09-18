@@ -106,6 +106,8 @@ These simulations use a **12×12 grid: 144 nodes and 264 undirected edges**.
 The regular layout makes supporting paths and omitted edges easy to inspect.
 All comparisons use seed 0; the figures below use multiple rows and larger
 panel labels so they remain readable in the repository view.
+The algorithm, edge-budget, and sampling demos share a seeded **RandST**
+backbone (`randst`, or `fixed-randst` for Sample).
 
 ### Choose a support backbone
 
@@ -123,7 +125,10 @@ Blue edges are retained; gray dashed edges are omitted.
 ![Animated comparison of seven support backbones, ending with LLST](docs/images/grid_backbones.gif)
 
 The LLST example uses its default GLST initializer and up to 10 exhaustive
-search passes. See the [measured results](docs/images/grid_backbones.json) and
+search passes. **LLST is expensive and intended for small graphs:** inputs
+above **1,000 undirected edges** are rejected by default. Use `randst`,
+`fast-randst`, or `fast-maxst` for larger graphs.
+See the [measured results](docs/images/grid_backbones.json) and
 [backbone guide](docs/backbones.md#llst) for settings and sampled search options.
 
 ### Compare the five algorithms
@@ -137,10 +142,11 @@ shows the input and all five outputs. Pale red marks their shared seeded
 ### Resample a sparse view each epoch
 
 `scaffold.sample` computes edge weights once, then draws a new support at each
-epoch. The animation shows the input, the current sparse view, the cumulative
-union, and its coverage curve in a **2×2 grid**. Every view has 191 edges and
+epoch, retaining the same seeded RandST backbone in every draw. The animation
+shows the input, the current sparse view, the cumulative union, and its
+coverage curve in a **2×2 grid**. Every view has 191 edges and
 remains connected; the accumulated union records what training has seen.
-This run reaches **100% cumulative coverage** within 50 epochs.
+This run reaches **99.6% cumulative coverage (263 of 264 edges)** after 50 epochs.
 
 ![Animated two-by-two view of sparse draws and cumulative coverage over 50 epochs](docs/images/grid_coverage.gif)
 
@@ -162,10 +168,10 @@ compares repeated draws with a single fixed support through epoch 50.
 
 ### Reduce the edge budget
 
-This grid compares Scaffold-Fast at five retention ratios. Connectivity is
-preserved while the budget can hold a spanning tree. This graph requires at
-least **143 retained edges (54.2% of its edges)**; smaller budgets must
-disconnect it.
+This grid compares Scaffold-Fast at five retention ratios using a seeded
+RandST backbone. Connectivity is preserved while the budget can hold a
+spanning tree. This graph requires at least **143 retained edges (54.2% of
+its edges)**; smaller budgets must disconnect it.
 
 ![Input and five retention ratios in a two-by-three grid](docs/images/grid_ratios.png)
 
@@ -253,6 +259,12 @@ Greedy, Heap and Batch accept the same backbone options. See
 settings, and [`examples/05_local_search_backbone.py`](examples/05_local_search_backbone.py)
 for a standalone forest example.
 
+The 1,000-edge LLST limit counts the full undirected input, even when the
+requested output budget is small. Exhaustive cycle-swap search can take many
+minutes; the threshold is not a speed guarantee for smaller inputs. Deliberate
+experiments can raise it with `backbone_options={"max_input_edges": 2000}`;
+the backbone guide shows how to combine this with sampled search.
+
 ---
 
 ## PyTorch Geometric
@@ -336,7 +348,7 @@ the connectivity guarantee possible.
 | `randst` | Kruskal on a full random permutation. Better mixing than `fast-randst`, but slower and uses an `O(m)` order array. |
 | `spt` | Multi-source BFS forest. Low diameter. |
 | `glst` | Greedy low-stretch tree, `O(n·m·|cut|)` — small graphs only. |
-| `llst` | Local-search low-stretch forest. Refines GLST (or another initializer) with improving cycle swaps; exact and sampled search options. Requires NetworkX; intended for small graphs. |
+| `llst` | Local-search low-stretch forest. Expensive cycle-swap refinement; **1,000 input edges maximum by default**. Exact/sampled search and an explicit limit override; requires NetworkX. |
 | `none` | No backbone. Connectivity is then *not* guaranteed. |
 
 ```python

@@ -31,7 +31,8 @@ Available backbones
                 small graphs only.
 ``llst``        Local-search low-stretch forest. Improves an initial tree with
                 edge swaps; exact by default, with optional sampling. Small
-                graphs only; requires the NetworkX extra.
+                graphs only; limited to 1,000 input edges by default. Requires
+                the NetworkX extra.
 ``none``        Start from the empty graph. Connectivity is then *not*
                 guaranteed -- only use this if you want the pure score ranking.
 ============== =============================================================
@@ -57,6 +58,7 @@ from .kernels import (
 
 __all__ = [
     "DEFAULT_BACKBONE",
+    "DEFAULT_LLST_MAX_INPUT_EDGES",
     "available_backbones",
     "build_backbone",
     "canonical_backbone_name",
@@ -66,6 +68,7 @@ __all__ = [
 DEFAULT_BACKBONE = "fast-maxst"
 DEFAULT_BUCKETS = 256
 MAX_BUCKETS = 65_536
+DEFAULT_LLST_MAX_INPUT_EDGES = 1_000
 
 _ALIASES = {
     "fast_maxst": "fast-maxst",
@@ -133,6 +136,10 @@ def build_backbone(
     ``max_edges`` caps the forest size; union-find stops as soon as that many
     acyclic edges have been accepted, so a partial forest is built directly
     rather than built in full and truncated.
+
+    LLST additionally limits the full input to 1,000 undirected edges by
+    default. Its positive-integer ``max_input_edges`` option changes this
+    runtime guard independently of the output's ``max_edges`` budget.
     """
     m = graph.num_edges
 
@@ -409,7 +416,30 @@ def _greedy_low_stretch_forest(graph: Graph, max_edges, seed, eta=1.0, alpha=1.0
 # ----------------------------------------------------------------------
 # registration
 # ----------------------------------------------------------------------
-def _local_search_low_stretch_forest(graph: Graph, max_edges=None, seed=None, **options):
+def _local_search_low_stretch_forest(
+    graph: Graph,
+    max_edges=None,
+    seed=None,
+    max_input_edges=DEFAULT_LLST_MAX_INPUT_EDGES,
+    **options,
+):
+    """Reject oversized LLST inputs before loading or running local search."""
+    if (
+        isinstance(max_input_edges, (bool, np.bool_))
+        or not isinstance(max_input_edges, (int, np.integer))
+        or max_input_edges < 1
+    ):
+        raise ValueError("LLST max_input_edges must be a positive integer")
+    if graph.num_edges > max_input_edges:
+        raise ValueError(
+            f"backbone='llst' is intended for small graphs: this graph has "
+            f"{graph.num_edges:,} undirected input edges, above the "
+            f"max_input_edges={max_input_edges:,} runtime limit. Exhaustive "
+            "local search can take many minutes or longer. Use backbone='randst', "
+            "'fast-randst', or 'fast-maxst' instead. To deliberately raise the "
+            "limit, pass backbone_options={'max_input_edges': ...} to Scaffold "
+            "methods, or max_input_edges=... to build_backbone."
+        )
     # Keep NetworkX optional for users of the array-only backbones.
     from ._llst import local_search_low_stretch_forest
 

@@ -36,6 +36,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- LLST rejects graphs above 1,000 undirected input edges before construction,
+  with a runtime explanation and faster backbone alternatives. The positive
+  integer `max_input_edges` option allows a deliberate override, directly or
+  through `backbone_options`; exact and sampled search use the same guard.
+  The grid demo checks the limit before starting its backbone comparison.
 - `viz.compare_methods` now defaults to a three-column grid; `ncols` selects
   a different layout, including a single row.
 - GLST now uses weighted path lengths on weighted inputs, matching the research

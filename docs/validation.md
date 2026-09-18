@@ -58,3 +58,6 @@ comparison, so node/edge insertion order does not alter tie breaking.
 `tests/test_llst.py` independently verifies best improving swaps and local
 optimality using NetworkX distances, as well as forest validity, budgets,
 seeded sampling, original labels/weights, and optional-framework isolation.
+It also covers LLST's 1,000-edge runtime guard, normalized edge counting,
+explicit overrides through each supported Scaffold method, and early rejection
+of oversized backbone demos.

@@ -225,6 +225,95 @@ def test_invalid_candidate_strategy_is_not_silently_ignored():
         build_backbone(scaffold.grid_graph(2, 2), "llst", candidate_strategy="bad")
 
 
+@pytest.mark.parametrize("name", ["llst", "local_search_low_stretch_tree"])
+@pytest.mark.parametrize("options", [{}, {"max_edges": 2}, {"candidate_sample_size": 1}])
+def test_size_guard_runs_before_local_search(monkeypatch, name, options):
+    from scaffold import _llst
+
+    def unexpected_search(*args, **kwargs):
+        pytest.fail("Oversized input reached the expensive LLST implementation")
+
+    monkeypatch.setattr(_llst, "local_search_low_stretch_forest", unexpected_search)
+    graph = scaffold.normalize_graph(nx.cycle_graph(1001))
+    with pytest.raises(ValueError) as error:
+        build_backbone(graph, name, **options)
+    message = str(error.value)
+    for phrase in ("1,001", "1,000", "runtime", "randst", "fast-randst",
+                   "fast-maxst", "backbone_options", "max_input_edges"):
+        assert phrase in message
+
+
+def test_guard_counts_normalized_undirected_edges_and_allows_boundary():
+    # Two directed arcs per undirected edge must not double the size limit.
+    edges = np.vstack((np.arange(1000), np.arange(1, 1001)))
+    symmetric = np.concatenate((edges, edges[::-1]), axis=1)
+    result = scaffold.fast(symmetric, backbone="llst", num_edges=1000)
+    assert result.original_edges == result.sparse_edges == 1000
+    assert result.num_components() == 1
+
+
+@pytest.mark.parametrize("method", ["greedy", "heap", "batch", "fast"])
+def test_public_methods_cannot_bypass_guard_with_small_output_budget(method):
+    graph = scaffold.normalize_graph(nx.cycle_graph(1001))
+    with pytest.raises(ValueError, match="max_input_edges=1,000"):
+        scaffold.sparsify(graph, method=method, num_edges=10, backbone="llst")
+
+
+@pytest.mark.parametrize("method", [None, "greedy", "heap", "batch", "fast"])
+def test_explicit_size_override_reaches_sampled_llst(method):
+    graph = scaffold.normalize_graph(nx.cycle_graph(1001))
+    options = dict(
+        max_input_edges=np.int64(1001), init_support="randst", max_passes=1,
+        candidate_sample_size=1, cycle_sample_size=1, eval_sample_size=8,
+    )
+    if method is None:
+        mask = build_backbone(graph, "llst", seed=0, **options)
+    else:
+        result = scaffold.sparsify(
+            graph, method=method, num_edges=1000, backbone="llst",
+            backbone_options=options, seed=0,
+        )
+        mask = result.mask
+    assert mask.sum() == 1000
+    assert nx.is_tree(nx_graph(graph, mask))
+
+
+def test_custom_size_limit_can_be_lowered():
+    graph = scaffold.grid_graph(3, 3)
+    with pytest.raises(ValueError, match="max_input_edges=11"):
+        build_backbone(graph, "llst", max_input_edges=11)
+
+
+@pytest.mark.parametrize("limit", [0, -1, 1.5, "1000", None, np.nan, np.inf, True, np.bool_(True)])
+def test_size_limit_requires_positive_integer(limit):
+    with pytest.raises(ValueError, match="max_input_edges must be a positive integer"):
+        build_backbone(scaffold.grid_graph(2, 2), "llst", max_input_edges=limit)
+
+
+@pytest.mark.parametrize("backbone", ["randst", "fast-randst", "fast-maxst", "spt"])
+def test_recommended_backbones_are_not_limited_by_llst_guard(backbone):
+    graph = scaffold.normalize_graph(nx.cycle_graph(1001))
+    mask = build_backbone(graph, backbone, seed=0)
+    assert nx.is_tree(nx_graph(graph, mask))
+
+
+@pytest.mark.parametrize("selection", [[], ["--only", "backbones"]])
+def test_oversized_backbone_demo_fails_before_building_any_tree(tmp_path, selection):
+    root = Path(__file__).resolve().parents[1]
+    script = root / "examples" / "01_grid_demo.py"
+    output = tmp_path / "images"
+    result = subprocess.run(
+        [sys.executable, str(script), "--rows", "24", "--cols", "24",
+         "--out", str(output), *selection],
+        cwd=root, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 2
+    assert "1,104" in result.stderr and "1,000" in result.stderr
+    assert "--only ratios" in result.stderr
+    assert "building" not in result.stdout
+    assert not output.exists()
+
+
 def test_registered_aliases_and_optional_framework_isolation():
     assert "llst" in scaffold.available_backbones()
     assert canonical_backbone_name("local-search-low-stretch-tree") == "llst"
@@ -232,6 +321,13 @@ def test_registered_aliases_and_optional_framework_isolation():
 import sys
 import scaffold
 from scaffold.backbone import build_backbone
+assert 'networkx' not in sys.modules
+try:
+    build_backbone(scaffold.grid_graph(1, 1002), 'llst')
+except ValueError as exc:
+    assert 'max_input_edges' in str(exc)
+else:
+    raise AssertionError('Oversized LLST input was not rejected')
 assert 'networkx' not in sys.modules
 build_backbone(scaffold.grid_graph(2, 2), 'local_search_low_stretch_tree')
 assert 'networkx' in sys.modules

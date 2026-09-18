@@ -135,6 +135,13 @@ Tree distances sum edge weights (or count hops on unweighted inputs). Weighted
 LLST inputs must have finite, strictly positive weights. This is a stretch
 objective; the subsequent Scaffold growth stage also accounts for congestion.
 
+**Runtime limit: 1,000 undirected input edges by default.** LLST is a
+small-graph reference; exhaustive local search can take many minutes or
+longer. Larger inputs raise `ValueError` before LLST initialization or search,
+with a suggestion to use `randst`, `fast-randst`, or `fast-maxst`. The limit
+counts unique undirected edges after graph normalization, not the requested
+output budget or the largest component. It applies to sampled LLST too.
+
 Install `scaffold-sparse[networkx]` to use LLST. It works with Greedy, Heap,
 Batch and Fast and with every graph format accepted by those methods:
 
@@ -155,6 +162,7 @@ Scaffold methods:
 
 | option | default | meaning |
 |---|---|---|
+| `max_input_edges` | `1000` | Positive integer limiting the full undirected input; explicitly increase it to opt into larger, potentially slow experiments |
 | `init_support` | `"glst"` | Starting tree; choices below |
 | `max_passes` | `10` | Maximum accepted improving swaps per component; minimum 1 |
 | `candidate_strategy` | `"random"` | `"random"` or longest current `"tree_distance"` |
@@ -173,11 +181,34 @@ separate registered backbone. LLST preserves the research RandST initializer's
 seeded random-priority ordering; the package's standalone `randst` uses a
 permutation and can produce a different initial tree for the same seed.
 
-Exhaustive LLST is for small graphs: each pass may test many cycles and build
-a tree index for every trial swap. Sampling reduces the work; when
+An exhaustive pass may test `O(m n)` cycle swaps, rebuilding a tree index and
+evaluating stretch across all input edges for each trial. A more detailed
+bound is `C_init + O(P m ell (n + m) log n)`, where `P` is the pass limit,
+`ell` is the mean number of tree edges tested per candidate cycle, and
+`C_init` is the initializer cost. Even graphs below the guard can be slow.
+
+For a deliberate larger experiment, raise the limit explicitly and consider
+a lightweight initializer with sampled search:
+
+```python
+result = scaffold.fast(
+    G, keep_ratio=0.7, backbone="llst", seed=0,
+    backbone_options={
+        "max_input_edges": 2000,
+        "init_support": "randst",
+        "max_passes": 2,
+        "candidate_sample_size": 16,
+        "cycle_sample_size": 2,
+        "eval_sample_size": 64,
+    },
+)
+# For build_backbone(..., "llst"), pass these options directly.
+```
+
+Sampling reduces the work; when
 `eval_sample_size` is nonzero, improvements concern the sampled objective,
-not necessarily the full-graph objective. The default GLST initializer also
-retains its existing 5,000-edge guard.
+not necessarily the full-graph objective. Raising `max_input_edges` does not
+remove the default GLST initializer's separate 5,000-edge guard.
 
 Disconnected components and isolated nodes are preserved. A direct
 `max_edges` cap that cannot span a component returns its budgeted initializer
