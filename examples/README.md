@@ -32,8 +32,8 @@ each named construction.
 
 | file | shows |
 |---|---|
-| `grid_backbones.png` | input grid and seven backbones, including GLST and its LLST refinement, with measured stretch |
-| `grid_backbones.gif` | animated comparison of the same seven completed forests; LLST is the final frame |
+| `grid_backbones.png` | input grid and seven backbones, with full method names and measured stretch |
+| `grid_backbones.gif` | animated comparison of the same seven completed forests; each frame expands the name and explains construction; LLST is last |
 | `grid_methods.png` | input and five algorithms at one budget in a 2×3 grid |
 | `grid_ratios.png` | input and five Fast retention ratios in a 2×3 grid |
 | `grid_scores.png` | input, Sample weights, inclusion probabilities, and one draw in a 2×2 grid |
