@@ -37,6 +37,15 @@ KEEP_RATIO = 0.72  # a 12x12 grid needs 143/264 = 0.542 just to stay connected
 SEED = 0
 DEMO_BACKBONE = "randst"
 SAMPLE_DEMO_BACKBONE = "fixed-randst"
+BACKBONE_NAMES = {
+    "fast-maxst": "Fast maximum-weight\nspanning tree",
+    "maxst": "Maximum-weight\nspanning tree",
+    "fast-randst": "Fast randomized\nspanning tree",
+    "randst": "Random spanning tree",
+    "spt": "Shortest-path tree",
+    "glst": "Greedy low-stretch tree",
+    "llst": "Local-search\nlow-stretch tree",
+}
 
 
 def figure_backbones(graph, positions, out_dir):
@@ -143,6 +152,17 @@ def _draw_backbones(graph, positions, out_dir, masks, measurements):
             mask=mask,
             accent=name == "llst",
         )
+        ax.text(
+            0.5,
+            -0.055,
+            BACKBONE_NAMES[name],
+            transform=ax.transAxes,
+            ha="center",
+            va="top",
+            fontsize=12,
+            linespacing=1.15,
+            color="#1f5fbf" if name == "llst" else "#4b5563",
+        )
     reduction = 1 - measurements["llst"]["omitted_edge_stretch"] / max(
         1.0, measurements["glst"]["omitted_edge_stretch"]
     )
@@ -175,7 +195,7 @@ def _draw_backbones(graph, positions, out_dir, masks, measurements):
         color="#4b5563",
     )
     fig.subplots_adjust(
-        left=0.015, right=0.985, bottom=0.11, top=0.83, wspace=0.08, hspace=0.52
+        left=0.015, right=0.985, bottom=0.15, top=0.83, wspace=0.08, hspace=0.74
     )
     return _save(fig, out_dir, "grid_backbones.png")
 
@@ -223,7 +243,7 @@ def _animate_backbones(graph, positions, out_dir, masks, measurements):
         fig.text(
             0.5,
             0.91,
-            f"{index} / {len(masks)}     ·     same graph, seed 0",
+            f"{index} / {len(masks)}     ·     {BACKBONE_NAMES[name].replace(chr(10), ' ')}",
             ha="center",
             fontsize=12,
             color="#4b5563",

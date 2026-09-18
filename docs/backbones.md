@@ -13,7 +13,14 @@ The backbone is the spanning forest SCAFFOLD grows from. It does two jobs:
 
 The default is `fast-maxst`.
 
-![backbones on a grid](images/grid_backbones.png)
+The figure spells out each name: **MaxST** is a maximum-weight spanning tree,
+**RandST** a random spanning tree, **SPT** a shortest-path tree, **GLST** a
+greedy low-stretch tree, and **LLST** a local-search low-stretch tree.
+The `fast-` variants use cheaper edge ordering. Minimum-weight spanning trees
+use `mst` (MinST) or `fast-mst` in the API. These constructions return forests
+when the input has multiple connected components.
+
+![Seven support backbones with full method names and measured stretch](images/grid_backbones.png)
 
 The 12×12 grid comparison includes LLST beside its GLST initializer. Every
 backbone has 143 edges and one connected component; each label reports the
