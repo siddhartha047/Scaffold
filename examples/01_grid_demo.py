@@ -4,12 +4,11 @@ Run::
 
     python examples/01_grid_demo.py --out docs/images
 
-Why a grid? A 2-D lattice has no community structure, no hubs, and no
-"important" edges -- every edge is equivalent by symmetry. So whatever pattern
-survives sparsification is the *algorithm's* preference, not the graph's
-structure. On Cora you cannot see that; here you can.
+Why a grid? Its regular layout makes retained paths and omitted edges easy
+to compare, without the visual clutter of a large irregular graph.
 
-Produces five figures:
+Produces five grid figures, backbone and resampling GIFs, and measurements in
+``grid_backbones.json`` and ``grid_coverage.json``:
 
 1. ``grid_backbones.png``  -- what each support backbone looks like
 2. ``grid_methods.png``    -- the five algorithms at the same budget
@@ -21,6 +20,7 @@ Produces five figures:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 
 import numpy as np
@@ -28,6 +28,7 @@ import numpy as np
 import scaffold
 from scaffold import viz
 from scaffold.backbone import build_backbone
+from scaffold.scoring import tree_scores
 
 ROWS = COLS = 12
 KEEP_RATIO = 0.72  # a 12x12 grid needs 143/264 = 0.542 just to stay connected
@@ -37,26 +38,237 @@ METHODS_FIGURE_BACKBONE = "randst"
 
 def figure_backbones(graph, positions, out_dir):
     """Every SCAFFOLD run starts from a spanning forest. They differ a lot."""
+    names = ["fast-maxst", "maxst", "fast-randst", "randst", "spt", "glst", "llst"]
+    llst_options = {"init_support": "glst", "max_passes": 10}
+    measurements = {}
+    masks = {}
+    for name in names:
+        options = llst_options if name == "llst" else {}
+        print(f"  building {name}...", flush=True)
+        mask = build_backbone(graph, name, seed=SEED, **options)
+        stats = tree_scores(graph.num_nodes, graph.src, graph.dst, mask)
+        stretch = float(stats["total_stretch"])
+        measurements[name] = {
+            "options": options,
+            "forest_edges": int(mask.sum()),
+            "components": graph.num_nodes - int(mask.sum()),
+            "omitted_edge_stretch": stretch,
+            "retained_edge_ids": np.flatnonzero(mask).tolist(),
+        }
+        masks[name] = mask
+        print(f"    {int(mask.sum())} forest edges; omitted-edge stretch {stretch:.0f}")
+    path = _draw_backbones(graph, positions, out_dir, masks, measurements)
+    _animate_backbones(graph, positions, out_dir, masks, measurements)
+    metrics_path = os.path.join(out_dir, "grid_backbones.json")
+    with open(metrics_path, "w", encoding="utf-8") as stream:
+        json.dump(
+            {
+                "num_nodes": graph.num_nodes,
+                "num_edges": graph.num_edges,
+                "seed": SEED,
+                "backbones": measurements,
+            },
+            stream,
+            indent=2,
+        )
+        stream.write("\n")
+    print(f"  wrote {metrics_path}")
+    return path
+
+
+def _backbone_panel(graph, positions, ax, label, detail, mask=None, accent=False):
+    """Keep method names large and separate from the compact metric line."""
+    viz.draw_graph(graph, ax=ax, positions=positions, mask=mask, node_size=12)
+    _panel_title(ax, label, detail, accent=accent)
+
+
+def _panel_title(ax, label, detail, accent=False):
+    ax.set_title(
+        label,
+        fontsize=16,
+        fontweight="semibold",
+        pad=29,
+        color="#1f5fbf" if accent else "#22262e",
+    )
+    ax.text(
+        0.5,
+        1.015,
+        detail,
+        transform=ax.transAxes,
+        ha="center",
+        va="bottom",
+        fontsize=11,
+        color="#4b5563",
+    )
+
+
+def _count_label(count, noun):
+    return f"{count} {noun}{'' if count == 1 else 's'}"
+
+
+def _grid_heading(fig, title, subtitle, footer=""):
+    fig.suptitle(title, fontsize=22, fontweight="semibold", y=0.98)
+    fig.text(0.5, 0.925, subtitle, ha="center", fontsize=12, color="#4b5563")
+    if footer:
+        fig.text(0.5, 0.025, footer, ha="center", fontsize=11, color="#4b5563")
+    fig.subplots_adjust(
+        left=0.055, right=0.97, bottom=0.11, top=0.83, wspace=0.23, hspace=0.52
+    )
+
+
+def _draw_backbones(graph, positions, out_dir, masks, measurements):
     import matplotlib.pyplot as plt
 
-    names = ["fast-maxst", "maxst", "fast-randst", "randst", "spt", "glst"]
-    fig, axes = plt.subplots(1, len(names), figsize=(3.2 * len(names), 3.6))
-    for ax, name in zip(np.atleast_1d(axes), names):
-        mask = build_backbone(graph, name, seed=SEED)
-        viz.draw_graph(
-            graph,
-            ax=ax,
-            positions=positions,
-            mask=mask,
-            title=f"backbone='{name}'\n{int(mask.sum())} edges",
-        )
-    fig.suptitle(
-        "Support backbones: the spanning forest SCAFFOLD grows from "
-        "(default: fast-maxst)",
-        y=1.02,
+    fig, axes = plt.subplots(2, 4, figsize=(13.2, 8.8))
+    axes = axes.ravel()
+    _backbone_panel(
+        graph,
+        positions,
+        axes[0],
+        "Input grid",
+        f"{graph.num_nodes} nodes · {graph.num_edges} edges",
     )
-    fig.tight_layout()
+    for ax, (name, mask) in zip(axes[1:], masks.items()):
+        stats = measurements[name]
+        label = "fast-maxst · default" if name == "fast-maxst" else name
+        _backbone_panel(
+            graph,
+            positions,
+            ax,
+            label,
+            f"{stats['forest_edges']} edges · stretch {stats['omitted_edge_stretch']:,.0f}",
+            mask=mask,
+            accent=name == "llst",
+        )
+    reduction = 1 - measurements["llst"]["omitted_edge_stretch"] / max(
+        1.0, measurements["glst"]["omitted_edge_stretch"]
+    )
+    fig.suptitle("Support backbones", fontsize=22, fontweight="semibold", y=0.98)
+    fig.text(
+        0.5,
+        0.925,
+        "Same graph. Same forest size. Different supporting paths.",
+        ha="center",
+        fontsize=13,
+        color="#4b5563",
+    )
+    fig.text(
+        0.5,
+        0.047,
+        f"LLST refines GLST: {reduction:.1%} less omitted-edge stretch "
+        "with the same edge count.",
+        ha="center",
+        fontsize=12,
+        color="#1f5fbf",
+        fontweight="semibold",
+    )
+    fig.text(
+        0.5,
+        0.015,
+        "Blue: retained. Gray dashes: omitted. Stretch: total omitted-edge detour length. "
+        "LLST: up to 10 exhaustive swaps; seed 0.",
+        ha="center",
+        fontsize=10,
+        color="#4b5563",
+    )
+    fig.subplots_adjust(
+        left=0.015, right=0.985, bottom=0.11, top=0.83, wspace=0.08, hspace=0.52
+    )
     return _save(fig, out_dir, "grid_backbones.png")
+
+
+def _animate_backbones(graph, positions, out_dir, masks, measurements):
+    """Cycle through the measured forests, reusing the PNG's actual outputs.
+
+    These are completed-backbone comparisons, not algorithm insertion steps.
+    """
+    import matplotlib.pyplot as plt
+
+    explanations = {
+        "fast-maxst": "Default: bucketed weight ordering, followed by a union-find scan.",
+        "maxst": "Exact maximum-weight forest; tied weights give the same tree here.",
+        "fast-randst": "A seeded coprime-stride edge scan builds a randomized forest.",
+        "randst": "A full random edge permutation gives a different randomized forest.",
+        "spt": "A breadth-first forest keeps short paths from its starting roots.",
+        "glst": "GLST grows a forest using projected stretch and cut size.",
+        "llst": "LLST refines GLST through improving cycle swaps; the forest size stays fixed.",
+    }
+    frames = []
+    for index, (name, mask) in enumerate(masks.items(), start=1):
+        stats = measurements[name]
+        fig, axes = plt.subplots(1, 2, figsize=(10.4, 6.6), dpi=120)
+        _backbone_panel(
+            graph,
+            positions,
+            axes[0],
+            "Input grid",
+            f"{graph.num_nodes} nodes · {graph.num_edges} edges",
+        )
+        _backbone_panel(
+            graph,
+            positions,
+            axes[1],
+            name,
+            f"{stats['forest_edges']} edges · {_count_label(stats['components'], 'component')} · "
+            f"stretch {stats['omitted_edge_stretch']:,.0f}",
+            mask=mask,
+            accent=True,
+        )
+        fig.suptitle(
+            "Support backbone comparison", fontsize=20, fontweight="semibold", y=0.97
+        )
+        fig.text(
+            0.5,
+            0.91,
+            f"{index} / {len(masks)}     ·     same graph, seed 0",
+            ha="center",
+            fontsize=12,
+            color="#4b5563",
+        )
+        fig.text(0.5, 0.105, explanations[name], ha="center", fontsize=12)
+        if name == "llst":
+            initial = measurements["glst"]["omitted_edge_stretch"]
+            final = stats["omitted_edge_stretch"]
+            note = (
+                f"GLST → LLST: {initial:,.0f} → {final:,.0f} stretch "
+                f"({1 - final / max(1.0, initial):.1%} reduction); "
+                "up to 10 exhaustive swaps."
+            )
+        else:
+            note = (
+                "Blue: retained edges. Gray dashes: omitted edges. Lower stretch is better."
+            )
+        fig.text(0.5, 0.047, note, ha="center", fontsize=11, color="#1f5fbf")
+        fig.subplots_adjust(left=0.04, right=0.96, bottom=0.19, top=0.75, wspace=0.2)
+        frames.append(_gif_frame(fig))
+        plt.close(fig)
+
+    return _save_gif(frames, out_dir, "grid_backbones.gif", duration=2200, final_hold=4500)
+
+
+def _gif_frame(fig):
+    from PIL import Image
+
+    fig.canvas.draw()
+    return Image.fromarray(np.asarray(fig.canvas.buffer_rgba())[:, :, :3].copy())
+
+
+def _save_gif(frames, out_dir, name, duration=500, final_hold=2500):
+    # A shared palette prevents color flicker across frames.
+    first = frames[0].quantize(colors=128)
+    frames = [first] + [frame.quantize(palette=first, dither=0) for frame in frames[1:]]
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, name)
+    first.save(
+        path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=[duration] * (len(frames) - 1) + [final_hold],
+        loop=0,
+        disposal=2,
+    )
+    print(f"  wrote {path}")
+    return path
 
 
 def figure_methods(graph, positions, out_dir):
@@ -67,14 +279,24 @@ def figure_methods(graph, positions, out_dir):
         positions=positions,
         seed=SEED,
         backbone=METHODS_FIGURE_BACKBONE,
+        ncols=3,
+        figsize=(11.4, 8.8),
     )
-    fig.suptitle(
-        f"{ROWS}x{COLS} grid, keep_ratio={KEEP_RATIO:.0%} "
-        f"(pale red = shared {METHODS_FIGURE_BACKBONE} backbone, "
-        "bold blue = edges the method chose)",
-        y=1.03,
+    _panel_title(
+        fig.axes[0], "Input grid", f"{graph.num_nodes} nodes · {graph.num_edges} edges"
     )
-    fig.tight_layout()
+    for ax, (name, result) in zip(fig.axes[1:], results.items()):
+        _panel_title(
+            ax,
+            f"Scaffold-{name.capitalize()}",
+            f"{result.sparse_edges} edges · {_count_label(result.num_components(), 'component')}",
+        )
+    _grid_heading(
+        fig,
+        "Five algorithms, one edge budget",
+        f"Target retention {KEEP_RATIO:.0%} · shared {METHODS_FIGURE_BACKBONE} backbone · seed {SEED}",
+        "Pale red: shared backbone. Bold blue: added edges. Gray dashes: omitted edges.",
+    )
     path = _save(fig, out_dir, "grid_methods.png")
     for name, result in results.items():
         print(f"  {name:7s} {result.summary()}  components={result.num_components()}")
@@ -87,25 +309,28 @@ def figure_ratios(graph, positions, out_dir):
 
     delta_min = (graph.num_nodes - 1) / graph.num_edges
     ratios = [0.95, 0.85, 0.75, 0.65, 0.45]
-    fig, axes = plt.subplots(1, len(ratios), figsize=(3.2 * len(ratios), 3.6))
-    for ax, ratio in zip(np.atleast_1d(axes), ratios):
+    fig, axes = plt.subplots(2, 3, figsize=(11.4, 8.8))
+    axes = axes.ravel()
+    _backbone_panel(graph, positions, axes[0], "Input grid", f"{graph.num_edges} edges")
+    for ax, ratio in zip(axes[1:], ratios):
         result = scaffold.fast(graph, keep_ratio=ratio, seed=SEED)
         components = result.num_components()
-        note = "" if ratio >= delta_min else "  (below floor)"
-        viz.draw_graph(
+        _backbone_panel(
             graph,
-            ax=ax,
-            positions=positions,
+            positions,
+            ax,
+            f"Target {ratio:.0%}",
+            f"{result.sparse_edges} edges · {_count_label(components, 'component')}",
             mask=result.mask,
-            title=f"keep_ratio={ratio:.0%}{note}\n"
-            f"{result.sparse_edges} edges, {components} comp.",
         )
-    fig.suptitle(
-        f"scaffold.fast as the budget tightens "
-        f"(connectivity floor delta_min={delta_min:.1%})",
-        y=1.02,
+        if ratio < delta_min:
+            ax.title.set_color("#b45309")
+    _grid_heading(
+        fig,
+        "A smaller edge budget",
+        f"Scaffold-Fast · connectivity floor {delta_min:.1%} · seed {SEED}",
+        "Below the connectivity floor, an exact-budget support must split into components.",
     )
-    fig.tight_layout()
     return _save(fig, out_dir, "grid_ratios.png")
 
 
@@ -116,40 +341,59 @@ def figure_scores(graph, positions, out_dir):
     scores = scaffold.sample(graph, seed=SEED)
     probabilities = scores.inclusion_probabilities(keep_ratio=KEEP_RATIO)
 
-    fig, axes = plt.subplots(1, 3, figsize=(13.5, 4))
+    fig, axes = plt.subplots(2, 2, figsize=(9.2, 9.2))
+    axes = axes.ravel()
+    _backbone_panel(
+        graph,
+        positions,
+        axes[0],
+        "Input grid",
+        f"{graph.num_nodes} nodes · {graph.num_edges} edges",
+    )
     viz.draw_edge_scores(
         graph,
         scores.scores,
-        ax=axes[0],
+        ax=axes[1],
         positions=positions,
-        title="pi: SCAFFOLD edge weight\n(ratio-independent, computed once)",
-        label="pi",
+        colorbar=False,
     )
+    _panel_title(axes[1], "Sampling weights", "Computed once, reused across budgets")
     viz.draw_edge_scores(
         graph,
         probabilities,
-        ax=axes[1],
-        positions=positions,
-        title=f"inclusion probability at keep_ratio={KEEP_RATIO:.0%}\n"
-        f"(sums to the budget; core p=1 in yellow)",
-        label="p",
-    )
-    draw = scores.draw(keep_ratio=KEEP_RATIO, seed=SEED)
-    viz.draw_graph(
-        graph,
         ax=axes[2],
         positions=positions,
+        colorbar=False,
+    )
+    _panel_title(
+        axes[2],
+        "Inclusion probabilities",
+        f"Target {KEEP_RATIO:.0%} · yellow edges have p = 1",
+    )
+    for ax, label in [(axes[1], "weight"), (axes[2], "probability")]:
+        color_ax = ax.inset_axes([0.1, -0.075, 0.8, 0.035])
+        bar = fig.colorbar(ax.collections[0], cax=color_ax, orientation="horizontal")
+        bar.set_label(label, fontsize=10, labelpad=1)
+        bar.ax.tick_params(labelsize=9, pad=2)
+    draw = scores.draw(keep_ratio=KEEP_RATIO, seed=SEED)
+    _backbone_panel(
+        graph,
+        positions,
+        axes[3],
+        "One sparse draw",
+        f"{draw.sparse_edges} edges · {_count_label(draw.num_components(), 'component')}",
         mask=draw.mask,
-        title=f"one draw\n{draw.sparse_edges} edges, "
-        f"{draw.num_components()} component(s)",
     )
-    fig.suptitle(
-        "scaffold.sample: score every edge once, then draw a fresh graph per epoch",
-        y=1.02,
+    _grid_heading(
+        fig,
+        "Score once, sample repeatedly",
+        "Scaffold-Sample converts edge weights into an exact-budget draw.",
+        "Weights and probabilities use separate color scales. Blue edges form one draw.",
     )
-    fig.tight_layout()
-    print(f"  deterministic core: {int((probabilities >= 1 - 1e-12).sum())} edges "
-          f"always present out of {graph.num_edges}")
+    print(
+        f"  deterministic core: {int((probabilities >= 1 - 1e-12).sum())} edges "
+        f"always present out of {graph.num_edges}"
+    )
     return _save(fig, out_dir, "grid_scores.png")
 
 
@@ -161,38 +405,137 @@ def figure_coverage(graph, positions, out_dir):
     seen = np.zeros(graph.num_edges, dtype=bool)
     snapshots = {}
     curve = []
+    draws = []
+    unions = []
+    components = []
     for epoch in range(1, 51):
-        seen |= scores.draw(keep_ratio=KEEP_RATIO).mask
-        curve.append(seen.mean())
+        draw = scores.draw(keep_ratio=KEEP_RATIO)
+        draws.append(draw.mask.copy())
+        components.append(draw.num_components())
+        seen |= draw.mask
+        unions.append(seen.copy())
+        curve.append(float(seen.mean()))
         if epoch in (1, 3, 10):
             snapshots[epoch] = seen.copy()
 
-    fig, axes = plt.subplots(1, 4, figsize=(15, 3.9))
+    fig, axes = plt.subplots(2, 2, figsize=(9.2, 9.2))
+    axes = axes.ravel()
     for ax, (epoch, mask) in zip(axes, snapshots.items()):
-        viz.draw_graph(
+        _backbone_panel(
             graph,
-            ax=ax,
-            positions=positions,
+            positions,
+            ax,
+            f"After {_count_label(epoch, 'epoch')}",
+            f"{int(mask.sum())} / {graph.num_edges} edges seen ({mask.mean():.0%})",
             mask=mask,
-            title=f"union after {epoch} epoch(s)\n{mask.mean():.0%} of edges seen",
         )
-    axes[-1].plot(range(1, 51), np.asarray(curve) * 100, color="#1f5fbf", linewidth=2)
-    axes[-1].axhline(KEEP_RATIO * 100, color="#c8ccd4", linestyle="--", linewidth=1.2)
-    axes[-1].text(
-        26, KEEP_RATIO * 100 - 6, "a single fixed sparsifier", fontsize=8, color="#6b7280"
+    _coverage_curve(axes[-1], curve, curve[0])
+    _grid_heading(
+        fig,
+        "Small views, growing coverage",
+        f"Scaffold-Sample · target retention {KEEP_RATIO:.0%} per epoch · seed {SEED}",
+        "Panels show accumulated coverage. Each individual draw still has the same edge budget.",
     )
-    axes[-1].set_xlabel("epochs")
-    axes[-1].set_ylabel("% of edges seen at least once")
-    axes[-1].set_ylim(0, 104)
-    axes[-1].spines[["top", "right"]].set_visible(False)
-    axes[-1].set_title("coverage over training", fontsize=10)
-    fig.suptitle(
-        f"Per-epoch resampling at keep_ratio={KEEP_RATIO:.0%}: "
-        "each view is small, the union is not",
-        y=1.03,
+    path = _save(fig, out_dir, "grid_coverage.png")
+    _animate_coverage(graph, positions, out_dir, draws, unions, curve, components)
+    with open(os.path.join(out_dir, "grid_coverage.json"), "w", encoding="utf-8") as stream:
+        json.dump(
+            {
+                "seed": SEED,
+                "keep_ratio": KEEP_RATIO,
+                "num_nodes": graph.num_nodes,
+                "num_edges": graph.num_edges,
+                "epochs": [
+                    {
+                        "epoch": i + 1,
+                        "retained_edge_ids": np.flatnonzero(mask).tolist(),
+                        "components": components[i],
+                        "coverage": curve[i],
+                    }
+                    for i, mask in enumerate(draws)
+                ],
+            },
+            stream,
+            indent=2,
+        )
+        stream.write("\n")
+    print(
+        f"  coverage after 50 epochs: {curve[-1]:.1%}; "
+        f"{int(draws[0].sum())} edges in every draw"
     )
-    fig.tight_layout()
-    return _save(fig, out_dir, "grid_coverage.png")
+    return path
+
+
+def _coverage_curve(ax, curve, fixed_fraction):
+    ax.plot(
+        range(1, len(curve) + 1),
+        np.asarray(curve) * 100,
+        color="#1f5fbf",
+        linewidth=2.5,
+        label="resampled supports",
+    )
+    ax.axhline(
+        fixed_fraction * 100,
+        color="#9ca3af",
+        linestyle="--",
+        linewidth=1.5,
+        label="one fixed support",
+    )
+    ax.set_xlabel("Epoch", fontsize=11)
+    ax.set_ylabel("Edges seen (%)", fontsize=11)
+    ax.scatter([len(curve)], [curve[-1] * 100], s=20, color="#1f5fbf", zorder=3)
+    ax.set_xlim(0.5, 50.5)
+    ax.set_ylim(0, 105)
+    ax.set_yticks([0, 25, 50, 75, 100])
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.set_box_aspect(1)
+    ax.tick_params(labelsize=10)
+    ax.legend(loc="lower right", frameon=False, fontsize=9)
+    _panel_title(
+        ax,
+        "Coverage over time",
+        f"{curve[-1]:.0%} seen after {_count_label(len(curve), 'epoch')}",
+    )
+
+
+def _animate_coverage(graph, positions, out_dir, draws, unions, curve, components):
+    """A 2x2 view of real draws, their cumulative union, and the coverage curve."""
+    import matplotlib.pyplot as plt
+
+    frames = []
+    # Show every early draw, then sample the later epochs to keep the GIF small.
+    indices = list(range(10)) + [14, 19, 29, 39, 49]
+    for i in indices:
+        fig, axes = plt.subplots(2, 2, figsize=(9.2, 9.2), dpi=110)
+        axes = axes.ravel()
+        _backbone_panel(graph, positions, axes[0], "Input grid", f"{graph.num_edges} edges")
+        _backbone_panel(
+            graph,
+            positions,
+            axes[1],
+            f"Epoch {i + 1}: current view",
+            f"{int(draws[i].sum())} edges · {_count_label(components[i], 'component')}",
+            mask=draws[i],
+            accent=True,
+        )
+        _backbone_panel(
+            graph,
+            positions,
+            axes[2],
+            "Edges seen so far",
+            f"{int(unions[i].sum())} / {graph.num_edges} edges ({curve[i]:.0%})",
+            mask=unions[i],
+        )
+        _coverage_curve(axes[3], curve[: i + 1], curve[0])
+        _grid_heading(
+            fig,
+            "A fresh sparse view each epoch",
+            f"Scaffold-Sample · target retention {KEEP_RATIO:.0%} · seed {SEED}",
+            "Top right: one sparse draw. Bottom left: its union with all preceding draws.",
+        )
+        frames.append(_gif_frame(fig))
+        plt.close(fig)
+    return _save_gif(frames, out_dir, "grid_coverage.gif", duration=750, final_hold=3000)
 
 
 def _save(fig, out_dir, name):
@@ -211,6 +554,11 @@ def main():
     parser.add_argument("--out", default="docs/images", help="output directory")
     parser.add_argument("--rows", type=int, default=ROWS)
     parser.add_argument("--cols", type=int, default=COLS)
+    parser.add_argument(
+        "--only",
+        choices=("backbones", "methods", "ratios", "scores", "coverage"),
+        help="regenerate just one figure",
+    )
     args = parser.parse_args()
 
     import matplotlib
@@ -225,16 +573,17 @@ def main():
         f"delta_min={(graph.num_nodes - 1) / graph.num_edges:.3f}"
     )
 
-    print("\n[1/5] backbones")
-    figure_backbones(graph, positions, args.out)
-    print("\n[2/5] methods")
-    figure_methods(graph, positions, args.out)
-    print("\n[3/5] budgets")
-    figure_ratios(graph, positions, args.out)
-    print("\n[4/5] sample weights")
-    figure_scores(graph, positions, args.out)
-    print("\n[5/5] coverage")
-    figure_coverage(graph, positions, args.out)
+    figures = {
+        "backbones": figure_backbones,
+        "methods": figure_methods,
+        "ratios": figure_ratios,
+        "scores": figure_scores,
+        "coverage": figure_coverage,
+    }
+    selected = [args.only] if args.only else list(figures)
+    for index, name in enumerate(selected, start=1):
+        print(f"\n[{index}/{len(selected)}] {name}")
+        figures[name](graph, positions, args.out)
     print("\ndone.")
 
 

@@ -15,6 +15,22 @@ The default is `fast-maxst`.
 
 ![backbones on a grid](images/grid_backbones.png)
 
+The 12×12 grid comparison includes LLST beside its GLST initializer. Every
+backbone has 143 edges and one connected component; each label reports the
+sum of supporting-path lengths for the omitted edges. LLST uses up to 10
+exhaustive improving swaps with seed 0. The two randomized backbones also use
+seed 0; minimum-weight variants coincide with maximum-weight variants on this
+unweighted graph and are omitted from the image.
+LLST reduces omitted-edge stretch from 1,161 to 795 (31.5%) in this example.
+The [animated comparison](images/grid_backbones.gif) cycles through the same
+seven completed forests, ending with GLST and its LLST refinement.
+
+Regenerate the PNG, GIF, and [measurements](images/grid_backbones.json) with:
+
+```bash
+python examples/01_grid_demo.py --only backbones --out docs/images
+```
+
 ---
 
 ## The built-in backbones
@@ -95,14 +111,83 @@ Greedy low-stretch tree. Repeatedly adds the boundary edge maximizing
 where `cut[e]` counts graph edges crossing the two components `e` would merge,
 and `projStretch[e]` is their mean stretch once `e` is added.
 
-The best-quality backbone here — on the grid it gives the lowest total stretch
-of any deterministic option — at `O(n · m · |cut|)`. Guarded at 5,000 edges;
-beyond that it will raise rather than hang.
+Construction costs `O(n · m · |cut|)`. GLST also serves as the default
+initializer for LLST, which can further reduce its stretch through cycle swaps.
+Guarded at 5,000 edges; beyond that it will raise rather than hang.
 
 ```python
 scaffold.greedy(G, keep_ratio=0.5, backbone="glst",
                backbone_options={"eta": 1.0, "alpha": 1.0})
 ```
+
+### `llst`
+
+Local-search low-stretch tree, ported from the research implementation. It
+builds an initial tree in each component, then repeatedly adds a non-tree
+edge and removes an edge on the resulting cycle. Each accepted swap strictly
+reduces the evaluated total stretch:
+
+```
+sum(dist_T(u, v) / w(u, v) for (u, v) in E(G))
+```
+
+Tree distances sum edge weights (or count hops on unweighted inputs). Weighted
+LLST inputs must have finite, strictly positive weights. This is a stretch
+objective; the subsequent Scaffold growth stage also accounts for congestion.
+
+Install `scaffold-sparse[networkx]` to use LLST. It works with Greedy, Heap,
+Batch and Fast and with every graph format accepted by those methods:
+
+```python
+result = scaffold.fast(
+    G, keep_ratio=0.7, backbone="llst", seed=0,
+    backbone_options={"init_support": "maxst", "max_passes": 5},
+)
+
+# Or build just the forest, as a mask over canonical edges:
+from scaffold.backbone import build_backbone
+graph = scaffold.normalize_graph(G)
+forest = build_backbone(graph, "llst", seed=0, init_support="maxst", max_passes=5)
+```
+
+Options go directly to `build_backbone`, or inside `backbone_options` for the
+Scaffold methods:
+
+| option | default | meaning |
+|---|---|---|
+| `init_support` | `"glst"` | Starting tree; choices below |
+| `max_passes` | `10` | Maximum accepted improving swaps per component; minimum 1 |
+| `candidate_strategy` | `"random"` | `"random"` or longest current `"tree_distance"` |
+| `candidate_sample_size` | `0` | Add-edge candidates per pass; 0 evaluates all |
+| `eval_sample_size` | `0` | Original edges used to estimate stretch; 0 evaluates all |
+| `cycle_sample_size` | `0` | Removable edges tested per cycle; 0 tests all |
+| `resample_eval_each_pass` | `False` | Redraw the objective sample each pass |
+| `glst_alpha`, `glst_eta` | `1.0`, `1.0` | GLST initializer exponents |
+| `fast_tree_buckets` | `256` | Buckets for fast weighted initializers |
+| `verbose` | `False` | Report accepted swaps and evaluated stretch |
+
+Initializers are `glst`, `maxst`, `mst`, `fast-maxst`, `fast-mst`, `randst`,
+`randspt`, `fast-randst`, and `spt`; underscore aliases also work for the fast
+weighted names. `randspt` is available here as an LLST initializer, not as a
+separate registered backbone. LLST preserves the research RandST initializer's
+seeded random-priority ordering; the package's standalone `randst` uses a
+permutation and can produce a different initial tree for the same seed.
+
+Exhaustive LLST is for small graphs: each pass may test many cycles and build
+a tree index for every trial swap. Sampling reduces the work; when
+`eval_sample_size` is nonzero, improvements concern the sampled objective,
+not necessarily the full-graph objective. The default GLST initializer also
+retains its existing 5,000-edge guard.
+
+Disconnected components and isolated nodes are preserved. A direct
+`max_edges` cap that cannot span a component returns its budgeted initializer
+without swaps. Scaffold methods instead construct the complete LLST forest
+and use the package's usual random trim if their final budget is below the
+connectivity floor. Sample's specialized fixed/rotating-backbone modes are
+unchanged; `backbone="llst"` is not a Sample mode.
+
+See [`examples/05_local_search_backbone.py`](../examples/05_local_search_backbone.py)
+and the [research parity check](validation.md#llst-backbone).
 
 ### `none`
 
@@ -122,7 +207,8 @@ an ablation; almost never what you want in production.
 | More thoroughly shuffled support | `randst` |
 | Per-epoch resparsification | `fast-randst`, or `scaffold.sample(backbone="rotate-randst")` |
 | Hop distance matters more than weight | `spt` |
-| Small graph, want the best skeleton | `glst` |
+| Small graph, grow a tree using projected stretch | `glst` |
+| Small graph, refine a tree by improving stretch | `llst` |
 | Ablation with no structural guarantee | `none` |
 
 Measured on a 14×14 grid (196 nodes, 364 edges) — `total stretch` is the sum
@@ -137,11 +223,18 @@ over non-tree edges of `dist_F(u,v)/w(e)`, so lower is a better starting point:
 | `randst` | 195 | 1649 |
 | `spt` | 195 | 2355 |
 | `glst` | 195 | 1961 |
+| `llst` (GLST initializer, 10 passes) | 195 | 1257 |
 
 (On this unweighted grid the three weighted variants coincide, as noted above.
 Both randomized variants improve stretch here because a random maze has no
 long thin comb structure; `randst` happens to win for seed 0. This is a quality
 sample, not a claim that one randomized distribution always dominates.)
+
+LLST uses exhaustive candidate, cycle, and objective evaluation with seed 0
+and reduces GLST's omitted-edge stretch by 35.9% here. All forests have one
+component; growing each with `scaffold.fast` at `keep_ratio=0.7` retains
+exactly 255 edges and preserves connectivity. These are illustrative grid
+results, not a guarantee that one backbone always gives the best final support.
 
 Reproduce with [`examples/04_backbones_and_tuning.py`](../examples/04_backbones_and_tuning.py).
 

@@ -38,3 +38,23 @@ python validation/compare_research.py \
   --keep-ratio 0.6 \
   --seed 123
 ```
+
+## LLST backbone
+
+The LLST comparison uses small synthetic graphs and does not download datasets:
+
+```bash
+python validation/compare_llst_research.py
+```
+
+It checks 84 forest masks against the original
+`LocalSearchLowStretchTreeSparsifier`: seven research initializers, four
+exact/sampled configurations, and unweighted, weighted and disconnected
+fixtures. `--research-root` overrides the sibling checkout path. The research
+side requires its PyG dependencies; packaged LLST itself only adds NetworkX
+to the NumPy/SciPy core. Inputs are placed in the same canonical order before
+comparison, so node/edge insertion order does not alter tie breaking.
+
+`tests/test_llst.py` independently verifies best improving swaps and local
+optimality using NetworkX distances, as well as forest validity, budgets,
+seeded sampling, original labels/weights, and optional-framework isolation.

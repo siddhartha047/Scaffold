@@ -48,8 +48,10 @@ them, and do not combine either one with `num_edges`; contradictory budgets
 raise `ValueError`.
 
 Built-ins are `fast-maxst` (default), `fast-mst`, `fast-randst`, `maxst`,
-`mst`, `randst`, `spt`, `glst`, and `none`. `fast_randst` is accepted as the
-research-configuration spelling of `fast-randst`.
+`mst`, `randst`, `spt`, `glst`, `llst`, and `none`. `fast_randst` is accepted as the
+research-configuration spelling of `fast-randst`. `llst` is the local-search
+low-stretch forest for small graphs and requires the NetworkX extra; pass its
+search settings through `backbone_options` (see [LLST options](backbones.md#llst)).
 
 ### Objective knobs (all variants)
 
@@ -304,8 +306,13 @@ from scaffold import viz
 viz.draw_graph(graph, mask=result.mask, highlight=backbone_mask)
 viz.draw_result(result)
 viz.draw_edge_scores(graph, scores.scores)
-fig, results = viz.compare_methods(graph, keep_ratio=0.5)
+fig, results = viz.compare_methods(graph, keep_ratio=0.5, ncols=3)
 ```
+
+Method comparisons default to three columns, giving a 2×3 grid for the input
+and all five algorithms. Set `ncols=6` to request a single row. The
+[visual demo generator](../examples/01_grid_demo.py) also exports readable
+grid figures and animated backbone/resampling comparisons for the README.
 
 ---
 

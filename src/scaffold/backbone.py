@@ -29,6 +29,9 @@ Available backbones
                 about hop distance than about edge weight.
 ``glst``        Greedy low-stretch tree. Highest quality, ``O(n * m * |cut|)``:
                 small graphs only.
+``llst``        Local-search low-stretch forest. Improves an initial tree with
+                edge swaps; exact by default, with optional sampling. Small
+                graphs only; requires the NetworkX extra.
 ``none``        Start from the empty graph. Connectivity is then *not*
                 guaranteed -- only use this if you want the pure score ranking.
 ============== =============================================================
@@ -80,6 +83,8 @@ _ALIASES = {
     "bfs": "spt",
     "shortest_path": "spt",
     "low_stretch": "glst",
+    "local_search_low_stretch_tree": "llst",
+    "local_search_low_stretch": "llst",
     "empty": "none",
     "": "none",
 }
@@ -150,9 +155,7 @@ def build_backbone(
         raise ValueError(
             f"Unknown backbone {backbone!r}. Available: {available_backbones()}"
         )
-    return _validated(
-        _REGISTRY[name](graph, max_edges=max_edges, seed=seed, **options), m
-    )
+    return _validated(_REGISTRY[name](graph, max_edges=max_edges, seed=seed, **options), m)
 
 
 def _validated(mask, num_edges) -> np.ndarray:
@@ -371,13 +374,15 @@ def _greedy_low_stretch_forest(graph: Graph, max_edges, seed, eta=1.0, alpha=1.0
             cut = pair_key[key]
             cut_size[slot] = len(cut)
             u, v = int(graph.src[i]), int(graph.dst[i])
-            tree.add_edge(u, v)
+            tree.add_edge(u, v, weight=float(weight[i]))
             try:
                 total = 0.0
                 for j in cut:
                     x, y = int(graph.src[j]), int(graph.dst[j])
                     try:
-                        d = nx.shortest_path_length(tree, x, y)
+                        d = nx.shortest_path_length(
+                            tree, x, y, weight="weight" if graph.is_weighted else None
+                        )
                     except nx.NetworkXNoPath:
                         d = 0.0
                     total += d / max(float(weight[j]), eps)
@@ -393,7 +398,7 @@ def _greedy_low_stretch_forest(graph: Graph, max_edges, seed, eta=1.0, alpha=1.0
 
         best = boundary[int(np.lexsort((boundary, -score))[0])]
         u, v = int(graph.src[best]), int(graph.dst[best])
-        tree.add_edge(u, v)
+        tree.add_edge(u, v, weight=float(weight[best]))
         mask[best] = True
         added += 1
         old, new = comp[u], comp[v]
@@ -404,6 +409,14 @@ def _greedy_low_stretch_forest(graph: Graph, max_edges, seed, eta=1.0, alpha=1.0
 # ----------------------------------------------------------------------
 # registration
 # ----------------------------------------------------------------------
+def _local_search_low_stretch_forest(graph: Graph, max_edges=None, seed=None, **options):
+    # Keep NetworkX optional for users of the array-only backbones.
+    from ._llst import local_search_low_stretch_forest
+
+    return local_search_low_stretch_forest(graph, max_edges=max_edges, seed=seed, **options)
+
+
+register_backbone("llst", _local_search_low_stretch_forest)
 register_backbone(
     "fast-maxst",
     lambda graph, max_edges=None, seed=None, buckets=DEFAULT_BUCKETS, **_: (
@@ -434,8 +447,8 @@ register_backbone(
 )
 register_backbone(
     "fast-randst",
-    lambda graph, max_edges=None, seed=None, **_: (
-        _fast_random_forest(graph, max_edges, seed)
+    lambda graph, max_edges=None, seed=None, **_: _fast_random_forest(
+        graph, max_edges, seed
     ),
 )
 register_backbone(
