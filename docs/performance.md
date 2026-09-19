@@ -253,5 +253,25 @@ python benchmarks/bench_methods.py --sizes 16 32 --workers 8 --skip greedy heap
 That script includes Sample preprocessing **and** a draw in its Sample timing,
 so its timing scope differs from the preprocessing-only table above. It is a
 convenient local check, not a reproduction of the synthetic graph experiment.
-See [algorithm choices](algorithms.md) and [worker configuration](../README.md#parallelism)
+See [algorithm choices](algorithms.md) and [worker configuration](#worker-configuration)
 for the relevant trade-offs and controls.
+
+## Worker configuration
+
+All variants accept `workers`. With Numba installed (`[speed]`), use an integer
+to set a CPU thread budget, `1` for serial execution, or `"all"` for all available
+CPUs. Omitting it checks `SCAFFOLD_NUM_WORKERS`, then `OMP_NUM_THREADS`, then
+defaults to at most eight available CPUs. The selected edges do not change
+with the worker count.
+
+```python
+result = scaffold.fast(
+    G, keep_ratio=0.2, backbone="fast-randsf", seed=0, workers=8,
+)
+```
+
+Cap workers per job when running several jobs on one machine. More workers
+need not be faster: forest construction, reductions, and selection include
+sequential work, and small problems use serial paths automatically. Without
+Numba, kernels fall back to Python and `workers` has no effect. The first call
+may also include JIT compilation or cache loading.
