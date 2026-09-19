@@ -6,15 +6,16 @@ Run::
 
 Why a grid? Its regular layout makes retained paths and omitted edges easy
 to compare, without the visual clutter of a large irregular graph.
-The method, budget, and sampling demos share a seeded RandSF backbone;
-the backbone comparison shows each named construction separately.
+The method and sampling demos share a seeded RandSF backbone. The opening
+budget demo uses Scaffold-Greedy with LLSF; the backbone comparison shows
+each named construction separately.
 
 Produces five grid figures, backbone and resampling GIFs, and measurements in
 ``grid_backbones.json`` and ``grid_coverage.json``:
 
 1. ``grid_backbones.png``  -- what each support backbone looks like
 2. ``grid_methods.png``    -- the five algorithms at the same budget
-3. ``grid_ratios.png``     -- SCAFFOLD-Fast as the budget tightens
+3. ``grid_ratios.png``     -- SCAFFOLD-Greedy with LLSF as the budget tightens
 4. ``grid_scores.png``     -- SCAFFOLD-Sample's per-edge weights
 5. ``grid_coverage.png``   -- what per-epoch resampling covers over time
 """
@@ -353,18 +354,25 @@ def figure_methods(graph, positions, out_dir):
     return path
 
 
-def figure_ratios(graph, positions, out_dir):
+def figure_ratios(graph, positions, out_dir, quick=False):
     """README overview: the input and five progressively smaller budgets."""
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
     from matplotlib.patches import FancyBboxPatch
 
     delta_min = (graph.num_nodes - 1) / graph.num_edges
+    # Refine one forest, then share it across budgets. This avoids repeating
+    # the expensive LLSF construction for each panel.
+    options = {"init_support": "GLSF", "max_passes": 10}
+    if quick:
+        options.update(max_passes=2, candidate_sample_size=16, cycle_sample_size=4)
+    print("  building shared LLSF backbone...", flush=True)
+    backbone = build_backbone(graph, "LLSF", seed=SEED, **options)
     ratios = [0.85, 0.75, 0.65, 0.55, 0.45]
     panels = [("Input grid", f"{graph.num_edges} edges", None, False)]
     for ratio in ratios:
-        result = scaffold.fast(
-            graph, keep_ratio=ratio, backbone=DEMO_BACKBONE, seed=SEED
+        result = scaffold.greedy(
+            graph, keep_ratio=ratio, backbone=backbone, seed=SEED
         )
         components = result.num_components()
         detail = "connected" if components == 1 else _count_label(components, "component")
@@ -378,7 +386,7 @@ def figure_ratios(graph, positions, out_dir):
     fig.text(.035, .955, "Scaffold", fontsize=29, fontweight="bold", color="#1f5fbf")
     fig.text(.035, .915, "Reduce the edge budget. Keep every node.",
              fontsize=14, color="#4b5563")
-    fig.text(.965, .954, f"{graph.num_nodes} nodes · Scaffold-Fast · RandSF backbone",
+    fig.text(.965, .954, f"{graph.num_nodes} nodes · Scaffold-Greedy · LLSF backbone",
              ha="right", fontsize=11, color="#4b5563")
     fig.legend(
         handles=[
@@ -653,13 +661,13 @@ def main():
     args.cols = args.cols if args.cols is not None else (6 if args.quick else COLS)
 
     graph = scaffold.grid_graph(args.rows, args.cols)
-    if args.only in (None, "backbones") and graph.num_edges > DEFAULT_LLST_MAX_INPUT_EDGES:
+    if args.only in (None, "backbones", "ratios") and graph.num_edges > DEFAULT_LLST_MAX_INPUT_EDGES:
         parser.error(
-            f"The LLSF backbone demo is limited to {DEFAULT_LLST_MAX_INPUT_EDGES:,} "
+            f"The LLSF backbone and edge-budget demos are limited to {DEFAULT_LLST_MAX_INPUT_EDGES:,} "
             f"undirected input edges; this grid has {graph.num_edges:,}. "
             "Exhaustive local search can take many minutes or longer. Use a "
             "smaller grid, or select a RandSF demo with --only methods, "
-            "--only ratios, --only scores, or --only coverage."
+            "--only scores, or --only coverage."
         )
 
     import matplotlib
@@ -683,8 +691,8 @@ def main():
     selected = [args.only] if args.only else list(figures)
     for index, name in enumerate(selected, start=1):
         print(f"\n[{index}/{len(selected)}] {name}")
-        if name == "backbones":
-            figure_backbones(graph, positions, args.out, quick=args.quick)
+        if name in ("backbones", "ratios"):
+            figures[name](graph, positions, args.out, quick=args.quick)
         else:
             figures[name](graph, positions, args.out)
     print("\ndone.")

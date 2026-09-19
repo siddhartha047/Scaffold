@@ -41,9 +41,10 @@ python benchmarks/bench_methods.py --batch-sample-size 64 --batch-add-per-round 
 A 2-D lattice has a regular layout that makes supporting paths, omitted edges,
 and differences between backbones easy to inspect. The examples use the same
 graph and seed so that the effects of each method are visible.
-The method, smaller-budget, and sampling demos share a seeded `randsf`
-backbone (`fixed-randsf` for Sample). The backbone comparison still shows
-each named construction.
+The method and sampling demos share a seeded `randsf` backbone (`fixed-randsf`
+for Sample). The opening edge-budget demo uses Scaffold-Greedy with an LLSF
+backbone, built once and reused across all five ratios. The backbone comparison
+still shows each named construction.
 
 These grid inputs are unweighted and connected, so each forest in the figures
 is a single spanning tree. The display labels use RandSF, MaxSF, SPF, GLSF,
@@ -60,7 +61,7 @@ support can include additional edges and cycles.
 | `grid_backbones.png` | input grid and seven backbones, with full method names and measured stretch |
 | `grid_backbones.gif` | animated comparison of the same seven completed forests; each frame expands the name and explains construction; LLSF is last |
 | `grid_methods.png` | input and five algorithms at one budget in a 2×3 grid |
-| `grid_ratios.png` | README opening visual: input, then 85%, 75%, 65%, 55%, and 45% retention with Fast and RandSF, in a 2×3 grid |
+| `grid_ratios.png` | README opening visual: input, then 85%, 75%, 65%, 55%, and 45% retention with Greedy and LLSF, in a 2×3 grid |
 | `grid_scores.png` | input, Sample weights, inclusion probabilities, and one draw in a 2×2 grid |
 | `grid_coverage.png` | three union snapshots and the coverage curve in a 2×2 grid |
 | `grid_coverage.gif` | a 2×2 animation of input, current view, cumulative union, and coverage |
@@ -81,11 +82,12 @@ IDs, edge counts, component counts, and omitted-edge stretch for each forest. LL
 default GLSF initializer and up to 10 exhaustive search passes. All panels
 use the same graph and seed; LLSF preserves the forest size while reducing
 the total stretch of its initializer. Exact LLSF adds computation to these
-small-grid examples; the other four figures can be regenerated separately
-with `--only methods`, `--only ratios`, `--only scores`, or `--only coverage`.
-The script rejects a backbone comparison above 1,000 undirected input edges
-before building any trees, because LLSF's runtime can be very large. For
-larger grids, choose one of those RandSF demos. The LLSF API has an explicit
+small-grid examples. The opening `--only ratios` demo also uses LLSF with these
+settings; `--quick` uses two sampled swaps for both LLSF demos. Other figures
+can be regenerated separately with `--only methods`, `--only scores`, or
+`--only coverage`. The script rejects backbone and edge-budget demos above
+1,000 undirected input edges before building any trees. For larger grids,
+choose one of the RandSF demos. The LLSF API has an explicit
 `max_input_edges` override for deliberate experiments; see
 [the backbone guide](../docs/backbones.md#llst).
 
