@@ -4,7 +4,7 @@
 
 ![Scaffold on a grid: input, then 85%, 75%, 65%, 55%, and 45% edge retention](docs/images/grid_ratios.png)
 
-Scaffold-Greedy with a local-search low-stretch forest (LLSF) backbone. Blue edges
+Scaffold-Greedy with a seeded random spanning forest (RandSF) backbone. Blue edges
 are retained; gray dashes are omitted. The 45% view illustrates a budget below
 this grid's connectivity floor; all 144 nodes remain.
 
@@ -561,7 +561,7 @@ All comparisons use seed 0. Each caption explains the edge colors and
 measurements; backbone panels spell out their method names.
 The algorithm and sampling demos share a seeded **RandSF**
 backbone: a random spanning forest (`randsf`, or `fixed-randsf` for Sample).
-The opening edge-budget demo uses **Scaffold-Greedy with an LLSF backbone**.
+The opening edge-budget demo uses **Scaffold-Greedy with a RandSF backbone**.
 These grids are connected, so their spanning forests are single trees;
 the same methods construct one tree per component on disconnected inputs.
 
@@ -629,8 +629,7 @@ compares repeated draws with a single fixed support through epoch 50.
 ### Reduce the edge budget
 
 The opening grid compares Scaffold-Greedy at **85%, 75%, 65%, 55%, and 45%**
-edge retention using the same **LLSF backbone**, refined from GLSF with up to
-10 exhaustive improving swaps (seed 0). Connectivity is preserved while
+edge retention using the same seeded **RandSF backbone** (seed 0). Connectivity is preserved while
 the budget can hold a spanning tree. This graph requires at least **143 retained edges (54.2% of
 its edges)**; the 45% view keeps 119 edges and has 25 connected components.
 

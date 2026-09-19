@@ -297,7 +297,7 @@ def test_recommended_backbones_are_not_limited_by_llst_guard(backbone):
     assert nx.is_tree(nx_graph(graph, mask))
 
 
-@pytest.mark.parametrize("selection", [[], ["--only", "backbones"], ["--only", "ratios"]])
+@pytest.mark.parametrize("selection", [[], ["--only", "backbones"]])
 def test_oversized_backbone_demo_fails_before_building_any_tree(tmp_path, selection):
     root = Path(__file__).resolve().parents[1]
     script = root / "examples" / "01_grid_demo.py"
@@ -309,7 +309,7 @@ def test_oversized_backbone_demo_fails_before_building_any_tree(tmp_path, select
     )
     assert result.returncode == 2
     assert "1,104" in result.stderr and "1,000" in result.stderr
-    assert "--only methods" in result.stderr and "--only ratios" not in result.stderr
+    assert "--only methods" in result.stderr and "--only ratios" in result.stderr
     assert "building" not in result.stdout
     assert not output.exists()
 
