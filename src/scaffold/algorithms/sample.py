@@ -11,8 +11,8 @@ one ``searchsorted``.
 
 Precomputation (paper Algorithm 3)
 ----------------------------------
-1. Build a fixed backbone ``F0`` (MaxST by default, or seeded RandST) and ``R``
-   random spanning forests ``F_1..F_R``.
+1. Build a fixed backbone ``F0`` (MaxSF by default, seeded RandSF, or SLSF)
+   and ``R`` random spanning forests ``F_1..F_R``.
 2. Score every non-tree edge exactly against each forest with the
    ``O(m log n + n)`` tree kernel.
 3. Aggregate into a single ratio-independent weight::
@@ -49,7 +49,7 @@ from typing import Optional
 
 import numpy as np
 
-from ..backbone import build_backbone
+from ..backbone import build_backbone, canonical_sample_backbone
 from ..graph import Graph
 from ..kernels import (
     build_tree_index,
@@ -142,11 +142,12 @@ class ScaffoldSampler:
         self.tree_count = max(1, int(tree_count))
         self.workers = resolve_workers(workers)
         self.aggregate_lambda = float(aggregate_lambda)
-        backbone = str(backbone).strip().lower().replace("_", "-")
-        if backbone not in ("fixed-maxst", "fixed-randst", "rotate-randst"):
+        backbone = canonical_sample_backbone(backbone)
+        if backbone not in ("fixed-maxst", "fixed-randst", "fixed-slst", "rotate-randst"):
             raise ValueError(
-                "backbone must be 'fixed-maxst', 'fixed-randst', or "
-                "'rotate-randst', got "
+                "backbone must be 'fixed-maxsf', 'fixed-randsf', 'fixed-slsf', or "
+                "'rotate-randsf' (legacy 'fixed-maxst', 'fixed-randst', "
+                "'fixed-slst', and 'rotate-randst' also work), got "
                 f"{backbone!r}"
             )
         self.backbone = backbone
@@ -195,6 +196,8 @@ class ScaffoldSampler:
         # --- fixed backbone used to guarantee every draw ------------------
         if self.backbone == "fixed-randst":
             det_mask = build_backbone(graph, "randst", seed=self.seed)
+        elif self.backbone == "fixed-slst":
+            det_mask = build_backbone(graph, "slst", seed=self.seed)
         else:
             if graph.edge_weight is None:
                 visit = np.arange(m, dtype=np.int64)

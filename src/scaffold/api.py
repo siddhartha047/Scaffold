@@ -4,8 +4,9 @@ All five take any supported graph object and the same budget arguments.  The
 first four return the same :class:`~scaffold.result.ScaffoldResult`.
 Swapping one for another is a one-word change.
 
-"Spanning tree" in backbone names means a spanning forest in general:
-one tree per input connected component, with isolated vertices preserved.
+Backbone display names use forest terminology (RandSF, MaxSF, and so on).
+Historical API keys such as ``randst`` and ``maxst`` still denote spanning
+forests: one tree per input connected component, with isolated vertices preserved.
 A connected input gives a single tree. This describes the initial backbone;
 the final sparse support may contain cycles after edges are added.
 """
@@ -106,7 +107,9 @@ def greedy(
         Exact undirected edge budget.
     backbone:
         Support spanning forest (one tree per input component); see
-        :mod:`scaffold.backbone`. Default ``"fast-maxst"``. ``"none"``
+        :mod:`scaffold.backbone`. Default Fast-MaxSF (``"fast-maxsf"``;
+        historical key ``"fast-maxst"``). ``"SF"``, ``"MaxSF"``, ``"LLSF"``,
+        and other forest names work alongside their older spellings. ``"none"``
         disables the backbone connectivity guarantee.
     seed:
         Seed for any stochastic component (random backbones, tie-breaking
@@ -258,7 +261,8 @@ def sample(
 
     Extra options: ``tree_count`` (number of random forests to aggregate over),
     ``aggregate_lambda`` (score-vs-frequency mix), ``backbone``
-    (``"fixed-maxst"``, ``"fixed-randst"``, or ``"rotate-randst"``),
+    (``"fixed-maxsf"``, ``"fixed-randsf"``, ``"fixed-slsf"``, or
+    ``"rotate-randsf"``; historical tree spellings remain accepted),
     ``weighted_paths``, ``workers``.
 
     The precompute scores ``tree_count`` independent backbones, so ``workers``

@@ -4,7 +4,7 @@
 
 ![Scaffold on a grid: input, then 85%, 75%, 65%, 55%, and 45% edge retention](docs/images/grid_ratios.png)
 
-Scaffold-Fast with a seeded random spanning tree (RandST) backbone. Blue edges
+Scaffold-Fast with a seeded random spanning forest (RandSF) backbone. Blue edges
 are retained; gray dashes are omitted. The 45% view illustrates a budget below
 this grid's connectivity floor; all 144 nodes remain.
 
@@ -14,10 +14,10 @@ It builds a sparse graph in two stages: choose a **support backbone**
 congested detours. Each output meets the requested edge budget and preserves
 the input's connected components whenever that budget can hold the backbone.
 
-**Tree terminology:** “spanning tree” in method names and descriptions is
-shorthand for a **spanning forest**: one tree per input connected component,
-with isolated vertices preserved. On a connected input, this forest is a
-single spanning tree.
+**Spanning forests:** each backbone contains one tree per input connected
+component, with isolated vertices preserved. We use forest names such as
+**RandSF**, **MaxSF**, and **MinSF**; a connected input is the special case
+where the forest is a single tree.
 
 The core uses NumPy and SciPy. Inputs can be NetworkX graphs, PyTorch Geometric
 `Data`, SciPy sparse matrices, or `(2, m)` edge-index arrays.
@@ -98,9 +98,9 @@ A_sparse = result.to_scipy()
 ```
 
 `keep_ratio=0.6` retains `ceil(0.6 * m)` undirected edges. Use `num_edges=`
-instead for an explicit budget. Fast uses `fast-maxst` as its default backbone;
-pass `backbone="randst"` for a seeded random spanning forest. The visual demos
-below use RandST for the algorithm, budget, and sampling comparisons.
+instead for an explicit budget. Fast uses `fast-maxsf` as its default backbone;
+pass `backbone="randsf"` for a seeded random spanning forest. The visual demos
+below use RandSF for the algorithm, budget, and sampling comparisons.
 
 ---
 
@@ -249,31 +249,47 @@ the connectivity guarantee possible.
 
 The names below also label the [backbone figures](#choose-a-support-backbone).
 **All built-in backbone constructions except `none` compute a spanning
-forest**, even when their conventional names say “tree.” For `n` nodes and
+forest**. For `n` nodes and
 `c` input components, the full backbone contains `n − c` edges and one tree
 per component; an isolated vertex is a one-node tree. No edges are invented
 between disconnected components. The **final sparse support can contain
 cycles** because Scaffold adds edges to this initial forest.
 
+The display names use **SF** for spanning forest, **SPF** for shortest-path
+forest, **GLSF** for greedy low-stretch forest, and **LLSF** for local-search
+low-stretch forest. Python accepts the forest spellings (`randsf`, `maxsf`,
+`minsf`, `spf`, `glsf`, `llsf`) and their historical tree spellings as exact
+synonyms. Case and hyphen/underscore differences are accepted too.
+Use `backbone="SF"` or `backbone="MaxSF"` for the deterministic maximum-weight
+forest, and `backbone="LLSF"` for local search. Old names such as `maxst`,
+`randst`, `mst`, and `llst` remain supported without changing their behavior.
+Metadata and saved artifacts keep their historical keys for compatibility.
+See the [complete alias tables](docs/backbones.md#forest-aliases), including
+Sample's `fixed-maxsf`, `fixed-slsf`, and `rotate-randsf` modes.
+
 | API name | Full name | How it builds the backbone |
 |---|---|---|
-| **`fast-maxst`** | **Fast maximum-weight spanning tree** | **Default.** Approximate weight ordering with buckets, followed by Kruskal. |
-| `fast-mst` | Fast minimum-weight spanning tree | Bucketed Kruskal favoring smaller weights. |
-| `maxst` | Maximum-weight spanning tree | Exact Kruskal, favoring larger weights. |
-| `mst` | Minimum-weight spanning tree (MinST) | Exact Kruskal, favoring smaller weights. |
-| `fast-randst` | Fast randomized spanning tree | Seeded strided edge scan, without a full permutation array. |
-| `randst` | Random spanning tree (RandST) | Kruskal over a seeded random edge permutation. |
-| `spt` | Shortest-path tree (SPT) | Breadth-first forest from degree-selected roots; uses hop distance. |
-| `glst` | Greedy low-stretch tree (GLST) | Greedily grows a forest using projected stretch and cut size; small graphs only. |
-| `llst` | Local-search low-stretch tree (LLST) | Refines an initial forest through improving cycle-edge swaps; small graphs only. |
+| **`fast-maxsf`** | **Fast maximum-weight spanning forest (Fast-MaxSF)** | **Default.** Approximate weight ordering with buckets, followed by Kruskal. |
+| `fast-minsf` | Fast minimum-weight spanning forest (Fast-MinSF) | Bucketed Kruskal favoring smaller weights. |
+| `maxsf` | Maximum-weight spanning forest (MaxSF) | Exact Kruskal, favoring larger weights. |
+| `minsf` | Minimum-weight spanning forest (MinSF) | Exact Kruskal, favoring smaller weights. |
+| `fast-randsf` | Fast randomized spanning forest (Fast-RandSF) | Seeded strided edge scan, without a full permutation array. |
+| `randsf` | Random spanning forest (RandSF) | Kruskal over a seeded random edge permutation. |
+| `spf` | Shortest-path forest (SPF) | Breadth-first forest from degree-selected roots; uses hop distance. |
+| `randspf` | Random shortest-path forest (RandSPF) | Seeded random roots and traversal/tie ordering; BFS or weighted Dijkstra. Requires NetworkX. |
+| `slsf` | Scalable low-stretch forest (SLSF) | Multi-root BFS/Dijkstra heuristic, selecting by estimated mean stretch. Requires NetworkX. |
+| `glsf` | Greedy low-stretch forest (GLSF) | Greedily grows a forest using projected stretch and cut size; small graphs only. |
+| `llsf` | Local-search low-stretch forest (LLSF) | Refines an initial forest through improving cycle-edge swaps; small graphs only. |
 | `none` | No backbone | Select edges without the backbone connectivity guarantee. |
 
-The randomized backbones randomize edge order; they are not uniform spanning-tree
+The randomized Kruskal backbones randomize edge order; they are not uniform spanning-tree
 samplers. On unweighted inputs, the minimum- and maximum-weight variants
 coincide under the implementation's tie ordering.
 
 ```python
-scaffold.fast(G, keep_ratio=0.2, backbone="fast-randst", seed=0)
+scaffold.available_backbones(notation="forest")  # preferred SF names
+scaffold.fast(G, keep_ratio=0.2, backbone="SF", seed=0)  # same as MaxSF / maxst
+scaffold.fast(G, keep_ratio=0.2, backbone="fast-randsf", seed=0)
 scaffold.fast(G, keep_ratio=0.2, backbone=my_precomputed_mask)
 
 scaffold.register_backbone("mine", my_builder)   # plug in your own
@@ -282,26 +298,26 @@ scaffold.register_backbone("mine", my_builder)   # plug in your own
 See [`docs/backbones.md`](https://github.com/siddhartha047/Scaffold/blob/main/docs/backbones.md) and
 [`examples/04_backbones_and_tuning.py`](https://github.com/siddhartha047/Scaffold/blob/main/examples/04_backbones_and_tuning.py).
 
-### Local-search backbone (LLST)
+### Local-search backbone (LLSF)
 
-For small graphs, the research local-search low-stretch tree is available as
-`backbone="llst"` (requires `pip install "scaffold-sparse[networkx]"`). It
+For small graphs, the local-search low-stretch forest is available as
+`backbone="llsf"` (requires `pip install "scaffold-sparse[networkx]"`). It
 refines an initial spanning forest through improving cycle-edge swaps within
 each component before Scaffold adds the remaining budget:
 
 ```python
 result = scaffold.fast(
-    G, keep_ratio=0.7, backbone="llst", seed=0,
-    backbone_options={"init_support": "maxst", "max_passes": 5},
+    G, keep_ratio=0.7, backbone="llsf", seed=0,
+    backbone_options={"init_support": "maxsf", "max_passes": 5},
 )
 ```
 
 Greedy, Heap and Batch accept the same backbone options. See
-[`docs/backbones.md`](docs/backbones.md#llst) for the exact and sampled LLST
+[`docs/backbones.md`](docs/backbones.md#llst) for the exact and sampled LLSF
 settings, and [`examples/05_local_search_backbone.py`](examples/05_local_search_backbone.py)
 for a standalone forest example.
 
-**LLST rejects inputs above 1,000 undirected edges by default.** The limit
+**LLSF rejects inputs above 1,000 undirected edges by default.** The limit
 counts the full input, even when the requested output budget is small.
 Exhaustive cycle-swap search can take many
 minutes; the threshold is not a speed guarantee for smaller inputs. Deliberate
@@ -403,7 +419,7 @@ Per-epoch resparsification — one precompute, a fresh view each epoch:
 from scaffold.pyg import ScaffoldResampler
 
 resampler = ScaffoldResampler(data, keep_ratio=0.6, seed=0,
-                              backbone="rotate-randst")
+                              backbone="rotate-randsf")
 
 for epoch in range(500):
     view = resampler.epoch(epoch)      # a new Data, exact budget, exact components
@@ -539,38 +555,38 @@ measurements, and the estimation method.
 
 ## Visual demos
 
-These simulations use a **12×12 grid: 144 nodes and 264 undirected edges**.
+These simulations use an **unweighted 12×12 grid: 144 nodes and 264 undirected edges**.
 The regular layout makes supporting paths and omitted edges easy to inspect.
 All comparisons use seed 0. Each caption explains the edge colors and
 measurements; backbone panels spell out their method names.
-The algorithm, edge-budget, and sampling demos share a seeded **RandST**
-backbone: a random spanning tree (`randst`, or `fixed-randst` for Sample).
+The algorithm, edge-budget, and sampling demos share a seeded **RandSF**
+backbone: a random spanning forest (`randsf`, or `fixed-randsf` for Sample).
 These grids are connected, so their spanning forests are single trees;
 the same methods construct one tree per component on disconnected inputs.
 
 ### Choose a support backbone
 
 Every backbone below preserves connectivity with **143 edges**.
-**LLST (local-search low-stretch tree)** refines **GLST (greedy low-stretch tree)**
+**LLSF (local-search low-stretch forest)** refines **GLSF (greedy low-stretch forest)**
 through improving cycle swaps. Here, it reduces omitted-edge stretch from **1,161 to 795
-(31.5%)**, without changing the edge count. LLST is a backbone option for
+(31.5%)**, without changing the edge count. LLSF is a backbone option for
 Greedy, Heap, Batch, and Fast.
 
 ![Input grid and seven support backbones, each labeled with its API name and full name](docs/images/grid_backbones.png)
 
-The GIF names and explains each completed forest, finishing with LLST.
+The GIF names and explains each completed forest, finishing with LLSF.
 Blue edges are retained; gray dashed edges are omitted.
 
 <p align="center">
   <a href="docs/images/grid_backbones.gif">
-    <img src="docs/images/grid_backbones.gif" width="560" alt="Animated comparison with full backbone names and construction explanations, ending with LLST">
+    <img src="docs/images/grid_backbones.gif" width="560" alt="Animated comparison with full backbone names and construction explanations, ending with LLSF">
   </a>
 </p>
 
-The LLST example uses its default GLST initializer and up to 10 exhaustive
-search passes. **LLST is expensive and intended for small graphs:** inputs
-above **1,000 undirected edges** are rejected by default. Use `randst`,
-`fast-randst`, or `fast-maxst` for larger graphs.
+The LLSF example uses its default GLSF initializer and up to 10 exhaustive
+search passes. **LLSF is expensive and intended for small graphs:** inputs
+above **1,000 undirected edges** are rejected by default. Use `randsf`,
+`fast-randsf`, or `fast-maxsf` for larger graphs.
 See the [measured results](docs/images/grid_backbones.json) and
 [backbone guide](docs/backbones.md#llst) for settings and sampled search options.
 
@@ -578,14 +594,14 @@ See the [measured results](docs/images/grid_backbones.json) and
 
 At target retention **72%**, every method keeps **191 edges**. The 2×3 grid
 shows the input and all five outputs. Pale red marks their shared seeded
-`randst` backbone; bold blue marks the edges each method adds.
+`randsf` backbone; bold blue marks the edges each method adds.
 
 ![Input and five Scaffold outputs in a two-by-three grid at the same edge budget](docs/images/grid_methods.png)
 
 ### Resample a sparse view each epoch
 
 `scaffold.sample` computes edge weights once, then draws a new support at each
-epoch, retaining the same seeded RandST backbone in every draw. The animation
+epoch, retaining the same seeded RandSF backbone in every draw. The animation
 shows the input, the current sparse view, the cumulative union, and its
 coverage curve in a **2×2 grid**. Every view has 191 edges and
 remains connected; the accumulated union records what training has seen.
@@ -612,7 +628,7 @@ compares repeated draws with a single fixed support through epoch 50.
 ### Reduce the edge budget
 
 The opening grid compares Scaffold-Fast at **85%, 75%, 65%, 55%, and 45%**
-edge retention using a seeded RandST backbone. Connectivity is preserved while
+edge retention using a seeded RandSF backbone. Connectivity is preserved while
 the budget can hold a spanning tree. This graph requires at least **143 retained edges (54.2% of
 its edges)**; the 45% view keeps 119 edges and has 25 connected components.
 
@@ -631,7 +647,7 @@ python examples/01_grid_demo.py --only backbones --out docs/images
 python examples/01_grid_demo.py --only coverage --out docs/images
 python examples/01_grid_demo.py --only ratios --out docs/images
 
-# Quick preview: smaller graph and sampled LLST refinement.
+# Quick preview: smaller graph and sampled LLSF refinement.
 python examples/01_grid_demo.py --quick --out demo-preview
 ```
 
@@ -652,7 +668,7 @@ grid simulations; their quality rankings need not hold on other graphs.
 | [`docs/backbones.md`](https://github.com/siddhartha047/Scaffold/blob/main/docs/backbones.md) | Choosing and writing support backbones |
 | [`docs/pytorch-geometric.md`](https://github.com/siddhartha047/Scaffold/blob/main/docs/pytorch-geometric.md) | GNN integration in depth |
 | [`docs/validation.md`](https://github.com/siddhartha047/Scaffold/blob/main/docs/validation.md) | Real Cora parity with the research implementation |
-| [`examples/`](https://github.com/siddhartha047/Scaffold/tree/main/examples) | Five runnable walkthroughs, including LLST and the visual demos |
+| [`examples/`](https://github.com/siddhartha047/Scaffold/tree/main/examples) | Five runnable walkthroughs, including LLSF and the visual demos |
 
 ---
 

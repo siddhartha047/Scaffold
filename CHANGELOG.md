@@ -20,6 +20,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Forest notation is now the primary naming in README/API guides, runnable
+  examples, help text, and low-stretch progress messages. `SF`, `MaxSF`, `LLSF`,
+  and compact `FastMaxSF`/`FastRandSF` forms work alongside historical names.
+  `available_backbones(notation="forest")` lists preferred SF names; the
+  existing no-argument listing and canonical metadata/artifact keys are preserved.
+  The example flag `--exhaustive-llsf` also accepts its old `--exhaustive-llst` spelling.
+- Forest backbone aliases from the research notation, including Sample modes
+  and LLSF initializer names. Aliases preserve seeded results and normalize to
+  historical keys before metadata, draw-plan caching, and artifact storage.
+  The package keeps its established hyphenated `fast-*` canonical keys.
+- Optional NetworkX `slst`/`slsf` and `randspt`/`randspf` backbones, plus Sample's
+  `fixed-slst`/`fixed-slsf` mode. SLSF ports the research multi-root shortest-path
+  heuristic; RandSPF reuses the randomized BFS/Dijkstra LLSF initializer.
+- `spf` and Sample's `fixed-randsf` aliases for the package's existing `spt`
+  and `fixed-randst` modes.
+
 - Runtime expectations in the README and `docs/performance.md`, with recorded
   worker timings and separately labeled million-node extrapolations. Includes
   Batch's measured 5.3× eight-worker speedup, full repetition data, memory

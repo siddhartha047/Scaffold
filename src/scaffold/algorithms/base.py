@@ -14,7 +14,7 @@ from typing import Optional
 
 import numpy as np
 
-from ..backbone import DEFAULT_BACKBONE, build_backbone
+from ..backbone import DEFAULT_BACKBONE, build_backbone, canonical_backbone_name
 from ..graph import Graph
 from ..kernels import component_count
 from ..scoring import ScoreParams
@@ -46,6 +46,7 @@ class GrowthContext:
         # budget is below the connectivity floor, ``finish`` trims that forest
         # uniformly at random.  Besides matching the research implementation,
         # this avoids a deterministic edge-order bias at very small budgets.
+        backbone = canonical_backbone_name(backbone)
         self.backbone_name = backbone if isinstance(backbone, str) else "custom"
         self.backbone_mask = build_backbone(
             graph,

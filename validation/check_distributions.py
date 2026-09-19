@@ -38,7 +38,12 @@ for alias in ('scaffold_sparse', 'scaffold_sparsify'):
 graph = scaffold.grid_graph(4, 4)
 target = math.ceil(0.8 * graph.num_edges)
 for method in scaffold.METHODS:
-    result = scaffold.sparsify(graph, method=method, keep_ratio=0.8, seed=0)
+    backbone = 'fixed-maxsf' if method == 'sample' else 'fast-maxsf'
+    result = scaffold.sparsify(
+        graph, method=method, keep_ratio=0.8, seed=0, backbone=backbone,
+    )
+    canonical = 'fixed-maxst' if method == 'sample' else 'fast-maxst'
+    assert result.metadata['backbone'] == canonical, result.metadata
     if method == 'sample':
         result = result.draw(keep_ratio=0.8, seed=0)
     assert result.sparse_edges == target, method

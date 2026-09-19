@@ -29,14 +29,14 @@ def section(title):
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--side", type=int, default=8, help="grid side length (default: 8)")
-parser.add_argument("--exhaustive-llst", action="store_true",
-                    help="use 10 exhaustive LLST swaps instead of 2 sampled swaps")
+parser.add_argument("--exhaustive-llsf", "--exhaustive-llst", dest="exhaustive_llst", action="store_true",
+                    help="use 10 exhaustive LLSF swaps instead of 2 sampled swaps")
 args = parser.parse_args()
 if args.side < 2:
     parser.error("--side must be at least 2")
 if 2 * args.side * (args.side - 1) > 1000:
-    parser.error("this LLST comparison requires at most 1,000 input edges")
-llst_options = {"init_support": "glst", "max_passes": 10}
+    parser.error("this LLSF comparison requires at most 1,000 input edges")
+llst_options = {"init_support": "glsf", "max_passes": 10}
 if not args.exhaustive_llst:
     llst_options.update(max_passes=2, candidate_sample_size=16, cycle_sample_size=4)
 
@@ -48,27 +48,27 @@ print(f"graph: {G}  (delta_min = {(G.num_nodes - 1) / G.num_edges:.3f})")
 # ----------------------------------------------------------------------
 section("1. The available backbones")
 # ----------------------------------------------------------------------
-print(f"  {scaffold.available_backbones()}\n")
+print(f"  {scaffold.available_backbones(notation='forest')}\n")
 print(f"  {'backbone':12s} {'forest':>7s} {'stretch':>10s} {'edges':>7s} {'comp':>5s}")
 print(f"  {'-' * 12} {'-' * 7} {'-' * 10} {'-' * 7} {'-' * 5}")
-for name in ("fast-maxst", "maxst", "mst", "fast-randst", "randst", "spt", "glst", "llst"):
-    mask = build_backbone(G, name, seed=0, **(llst_options if name == "llst" else {}))
+for name in ("fast-maxsf", "maxsf", "minsf", "fast-randsf", "randsf", "spf", "glsf", "llsf"):
+    mask = build_backbone(G, name, seed=0, **(llst_options if name == "llsf" else {}))
     # total_stretch: sum over non-tree edges of dist_T(u,v)/w(e). Lower is a
     # better starting point -- fewer long detours for the growth phase to fix.
     stretch = tree_scores(G.num_nodes, G.src, G.dst, mask)["total_stretch"]
-    # Reuse exactly the forest measured above, including LLST's refinement.
+    # Reuse exactly the forest measured above, including LLSF's refinement.
     result = scaffold.fast(G, keep_ratio=KEEP, backbone=mask, seed=0)
     print(
         f"  {name:12s} {int(mask.sum()):7d} {stretch:10.0f} "
         f"{result.sparse_edges:7d} {result.num_components():5d}"
     )
-print("\n  On an *unweighted* grid, fast-maxst and maxst coincide: with no weights")
+print("\n  On an *unweighted* grid, fast-maxsf and maxsf coincide: with no weights")
 print("  to sort by, both fall back to the same deterministic scan. Give the grid")
 print("  weights and they diverge.")
-print("  fast-randst avoids constructing randst's full random permutation; it is")
-print("  normally faster, while randst provides a more thoroughly shuffled order.")
+print("  fast-randsf avoids constructing randsf's full random permutation; it is")
+print("  normally faster, while randsf provides a more thoroughly shuffled order.")
 search = "10 exhaustive" if args.exhaustive_llst else "2 sampled"
-print(f"  llst refines glst with up to {search} improving cycle swaps;")
+print(f"  llsf refines glsf with up to {search} improving cycle swaps;")
 print("  its forest has the same edge budget, with shorter total detours.")
 
 
@@ -77,11 +77,11 @@ section("2. Weighted graphs: the backbone follows the weights")
 # ----------------------------------------------------------------------
 Gw = scaffold.grid_graph(args.side, args.side, weight="distance")  # heavier near the centre
 print(f"  {Gw}, weights in [{Gw.edge_weight.min():.3f}, {Gw.edge_weight.max():.3f}]\n")
-for name in ("fast-maxst", "maxst", "fast-mst", "mst"):
+for name in ("fast-maxsf", "maxsf", "fast-minsf", "minsf"):
     mask = build_backbone(Gw, name, seed=0)
     mean_weight = float(Gw.edge_weight[mask].mean())
     print(f"  {name:12s} mean weight of backbone edges = {mean_weight:.4f}")
-print("\n  maxst keeps the heavy (central) edges, mst the light (peripheral) ones.")
+print("\n  maxsf keeps the heavy (central) edges, minsf the light (peripheral) ones.")
 print("  'fast-' variants bucket the weights into 256 priority classes and sort in")
 print("  linear time; the ordering is approximate, the union-find scan identical.")
 
@@ -155,7 +155,7 @@ section("4. Reusing one scoring pass across many budgets")
 # for the scores and threshold them yourself instead of re-running.
 result = scaffold.fast(G, keep_ratio=0.99, seed=0, return_scores=True)
 scores = result.metadata["scores"]
-backbone = build_backbone(G, "fast-maxst", seed=0)
+backbone = build_backbone(G, "fast-maxsf", seed=0)
 print(
     f"  one scoring pass over {G.num_edges} edges "
     f"({result.metadata['runtime'] * 1000:.1f} ms)\n"
@@ -192,9 +192,9 @@ register_backbone("lowest-id", star_forest)
 result = scaffold.fast(G, keep_ratio=KEEP, backbone="lowest-id", seed=0)
 print(f"  registered 'lowest-id' -> {result.summary()}")
 print(f"  components: {result.num_components()}")
-print(f"  available now: {scaffold.available_backbones()}")
+print(f"  available now: {scaffold.available_backbones(notation='forest')}")
 
 # A precomputed mask works without registering anything.
-custom = build_backbone(G, "randst", seed=99)
+custom = build_backbone(G, "randsf", seed=99)
 result = scaffold.fast(G, keep_ratio=KEEP, backbone=custom, seed=0)
 print(f"\n  passing a mask directly -> {result.summary()}")

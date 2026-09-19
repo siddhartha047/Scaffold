@@ -189,7 +189,7 @@ def main():
     section("4. Per-epoch resparsification")
     # ------------------------------------------------------------------
     resampler = ScaffoldResampler(
-        data, keep_ratio=args.keep_ratio, seed=0, backbone="rotate-randst"
+        data, keep_ratio=args.keep_ratio, seed=0, backbone="rotate-randsf"
     )
     print(f"  {resampler}")
     print(f"  delta_min (connectivity floor): {resampler.delta_min:.4f}")
