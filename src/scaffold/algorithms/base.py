@@ -18,7 +18,7 @@ from ..backbone import DEFAULT_BACKBONE, build_backbone, canonical_backbone_name
 from ..graph import Graph
 from ..kernels import component_count
 from ..scoring import ScoreParams
-from ..utils.validation import connectivity_floor, resolve_budget
+from ..utils.validation import connectivity_floor, resolve_budget, validate_edge_weights
 
 
 class GrowthContext:
@@ -36,6 +36,7 @@ class GrowthContext:
         check_connectivity: bool = True,
     ):
         self.graph = graph
+        validate_edge_weights(graph.edge_weight, graph.num_edges)
         self.params = params or ScoreParams()
         self.seed = seed
         self.started = time.perf_counter()

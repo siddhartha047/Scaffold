@@ -71,7 +71,7 @@ from .kernels import (
     tree_score,
     tree_terms,
 )
-from .utils.validation import validate_norm_order
+from .utils.validation import validate_edge_weights, validate_norm_order
 from .utils.workers import parallel_threads, resolve_workers
 
 __all__ = ["ScoreParams", "tree_scores", "path_scores", "combine_terms"]
@@ -198,6 +198,7 @@ def tree_scores(
     tree_mask = np.ascontiguousarray(tree_mask, dtype=bool)
     m = int(src.shape[0])
     eps = params.eps
+    weight = validate_edge_weights(weight, m)
     weight = (
         np.ones(m, dtype=np.float64)
         if weight is None
@@ -333,18 +334,23 @@ class PathScorer:
 
     Rebuilding CSR after every edge insertion would dominate the runtime, so
     the support adjacency is kept as growable per-node lists and rebuilt only
-    when :meth:`add_edge` has been called. Unweighted graphs use BFS; weighted
-    graphs use Dijkstra.
+    when :meth:`add_edge` has been called. With ``weighted_paths=None`` (the
+    default), unweighted graphs use BFS and weighted graphs use Dijkstra.
+    Explicit ``False`` uses BFS and a hop-count numerator; candidate edge
+    weights still divide dilation. ``True`` uses weighted path lengths.
     """
 
     def __init__(
-        self, num_nodes, src, dst, weight=None, support_mask=None, workers=None
+        self, num_nodes, src, dst, weight=None, support_mask=None, workers=None,
+        weighted_paths=None,
     ):
         self.num_nodes = int(num_nodes)
         self.src = np.ascontiguousarray(src, dtype=np.int64)
         self.dst = np.ascontiguousarray(dst, dtype=np.int64)
-        self.weight = None if weight is None else np.asarray(weight, dtype=np.float64)
         self.num_edges = int(self.src.shape[0])
+        self.weight = validate_edge_weights(weight, self.num_edges)
+        self.weighted_paths = self.weight is not None if weighted_paths is None else bool(weighted_paths)
+        self.path_weight = self.weight if self.weighted_paths else None
         self.workers = resolve_workers(workers)
         mask = (
             np.zeros(self.num_edges, dtype=bool)
@@ -503,7 +509,7 @@ class PathScorer:
                 self._rowptr, self._col, self._eid,
                 ordered_sources,
                 np.ascontiguousarray(self.dst[ordered_ids]),
-                weight=self.weight,
+                weight=self.path_weight,
                 workers=path_workers,
             )
 
@@ -589,14 +595,15 @@ class PathScorer:
             while end < order.size and int(sources[order[end]]) == source:
                 end += 1
 
-            reachable = self._dijkstra(source) if weighted else self._bfs(source)
+            use_dijkstra = weighted and self.weighted_paths
+            reachable = self._dijkstra(source) if use_dijkstra else self._bfs(source)
             for k in range(pos, end):
                 s = order[k]
                 target = int(self.dst[candidate_ids[s]])
                 if not reachable[target]:
                     continue
                 nodes, edges = self._walk(target)
-                if weighted:
+                if use_dijkstra:
                     distance = float(self._dist_float[target])
                 else:
                     distance = float(len(edges))
@@ -700,6 +707,7 @@ def path_scores(
     weight=None,
     params: Optional[ScoreParams] = None,
     candidate_ids=None,
+    weighted_paths=None,
 ):
     """Convenience wrapper: score candidates against ``support_mask`` directly.
 
@@ -711,5 +719,6 @@ def path_scores(
     support_mask = np.ascontiguousarray(support_mask, dtype=bool)
     if candidate_ids is None:
         candidate_ids = np.flatnonzero(~support_mask)
-    scorer = PathScorer(num_nodes, src, dst, weight=weight, support_mask=support_mask.copy())
+    scorer = PathScorer(num_nodes, src, dst, weight=weight, support_mask=support_mask.copy(),
+                        weighted_paths=weighted_paths)
     return scorer.evaluate(candidate_ids, params)

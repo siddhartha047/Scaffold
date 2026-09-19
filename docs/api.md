@@ -32,6 +32,20 @@ Returns a [`ScaffoldScores`](#scaffoldscores) — per-edge weights, **not** a
 subgraph. `keep_ratio` / `num_edges` are optional and only set the default
 budget for later `draw()` calls.
 
+### `scaffold.feature_edge_weights(G, features=None, metric="cosine", *, kind="similarity", batch_size=8192, metric_kwargs=None, min_weight=1e-12)`
+
+Returns float64 weights for the normalized graph's canonical edges. Cosine is
+shifted to `[0, 1]`; distances become `1 / (1 + d)` unless `kind="distance"`.
+Common metrics use NumPy/SciPy; additional sklearn `DistanceMetric` names need
+the `metrics` extra. Features may be dense, Torch, or SciPy sparse; PyG `x`
+is inferred if omitted. [Metric definitions and weight semantics](weighted.md).
+
+### `scaffold.with_feature_weights(G, features=None, metric="cosine", **kwargs)`
+
+Returns a new `Graph` carrying the derived weights, preserving node labels,
+isolated nodes, and the PyG source. Accepts the helper's options above; the
+input graph is not mutated.
+
 ---
 
 ## Shared arguments
@@ -100,12 +114,14 @@ overrides win over it.
 | `max_rounds` | `None` | safety cap on rescoring rounds |
 | `return_trace` | `False` | include `metadata["added_edge_ids"]` in insertion order; one edge per step when `batch_size=1` |
 | `verbose` | `False` | per-round progress |
+| `weighted_paths` | `None` | Dijkstra if weights exist; `False` explicitly uses BFS/hop numerator |
 
 ### `scaffold.heap` extras
 
 | argument | default | meaning |
 |---|---|---|
 | `top_k` | `16` | candidates rescored per round |
+| `weighted_paths` | `None` | Dijkstra if weights exist; `False` explicitly uses BFS/hop numerator |
 | `add_per_round` | `1` | edges committed per round, per cluster |
 | `clusters` | `None` | `None`/`1` for one global heap, an `int`, or a per-node label array |
 | `cluster_method` | `"bfs"` | `"bfs"`, `"metis"` (needs `pymetis`), `"random"` |
@@ -119,6 +135,7 @@ overrides win over it.
 | argument | default | meaning |
 |---|---:|---|
 | `clusters` | `None` | Auto count, an integer count, or per-node labels |
+| `weighted_paths` | `None` | Dijkstra if weights exist; `False` explicitly uses BFS/hop numerator |
 | `cluster_method` | `"bfs"` | `"bfs"`, `"metis"` (needs `pymetis`), or `"random"` |
 | `sample_size` | `None` (auto) | Candidates drawn and scored per cluster per round |
 | `add_per_round` | `None` (auto) | Top candidates committed per cluster; must be smaller than `sample_size` |
@@ -136,6 +153,11 @@ batch against the current support graph. It is the original sampled-growth
 Fast implementation, now separated from the one-pass LCA method.
 
 ### `scaffold.fast` extras
+
+For weighted graphs, pass `weighted_paths=True` explicitly. Fast and Sample
+keep their previous `False` default. Every variant divides dilation by the
+candidate edge weight even in hop-numerator mode; weights must be finite and
+nonnegative. [Complete weighted guide](weighted.md).
 
 | argument | default | meaning |
 |---|---|---|

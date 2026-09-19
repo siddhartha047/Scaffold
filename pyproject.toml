@@ -47,10 +47,11 @@ dependencies = [
 # without it, roughly 10-50x slower on large graphs.
 speed = ["numba>=0.57"]
 networkx = ["networkx>=2.8"]
+metrics = ["scikit-learn>=1.0"]
 pyg = ["torch>=1.13", "torch-geometric>=2.3"]
 viz = ["matplotlib>=3.5", "networkx>=2.8"]
 # Everything except torch, which users should install for their own CUDA build.
-all = ["numba>=0.57", "networkx>=2.8", "matplotlib>=3.5"]
+all = ["numba>=0.57", "networkx>=2.8", "matplotlib>=3.5", "scikit-learn>=1.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -60,6 +61,7 @@ dev = [
     "build>=1.0",
     "twine>=4.0",
     "ruff>=0.4",
+    "scikit-learn>=1.0",
 ]
 
 [project.urls]

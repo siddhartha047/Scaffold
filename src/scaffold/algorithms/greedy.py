@@ -42,6 +42,7 @@ def run(
     workers=None,
     verbose: bool = False,
     return_trace: bool = False,
+    weighted_paths: Optional[bool] = None,
 ):
     """Grow the support one (or ``batch_size``) best-scoring edge at a time.
 
@@ -76,6 +77,7 @@ def run(
         weight=graph.edge_weight,
         support_mask=ctx.mask.copy(),
         workers=workers,
+        weighted_paths=weighted_paths,
     )
 
     rounds = 0
@@ -119,6 +121,7 @@ def run(
         rounds=rounds,
         scored_candidates=scored_total,
         batch_size=batch_size,
+        weighted_paths=scorer.weighted_paths,
         workers=workers,
         **({"added_edge_ids": added_edge_ids} if return_trace else {}),
     )

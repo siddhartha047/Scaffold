@@ -30,7 +30,7 @@ import numpy as np
 
 package = Path(scaffold.__file__).resolve()
 assert Path(sys.prefix).resolve() in package.parents, package
-for name in ('networkx', 'matplotlib', 'torch', 'torch_geometric', 'numba'):
+for name in ('networkx', 'matplotlib', 'torch', 'torch_geometric', 'numba', 'sklearn'):
     assert name not in sys.modules, name
 for alias in ('scaffold_sparse', 'scaffold_sparsify'):
     assert importlib.import_module(alias).fast is scaffold.fast
@@ -54,6 +54,17 @@ for method in scaffold.METHODS:
 
 raw = graph.edge_index
 assert scaffold.fast(raw, num_edges=target).sparse_edges == target
+features = np.random.default_rng(3).normal(size=(graph.num_nodes, 3))
+weighted = scaffold.with_feature_weights(graph, features, metric='euclidean')
+assert 'sklearn' not in sys.modules
+for method in scaffold.METHODS:
+    result = scaffold.sparsify(weighted, method=method, num_edges=target,
+                              weighted_paths=True, seed=0)
+    if method == 'sample':
+        result = result.draw(num_edges=target, seed=0)
+    assert result.sparse_edges == target and result.num_components() == 1
+    np.testing.assert_array_equal(result.undirected_edge_weight, weighted.edge_weight[result.mask])
+    assert result.metadata['weighted_paths'] is True
 print('Installed-package smoke checks passed:', scaffold.__version__)
 """
 

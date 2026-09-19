@@ -44,6 +44,7 @@ def run(
     workers=None,
     verbose: bool = False,
     return_trace: bool = False,
+    weighted_paths: Optional[bool] = None,
 ):
     """Grow a support graph with sampled-batch dilation/congestion scoring.
 
@@ -98,6 +99,7 @@ def run(
             sample_size=sample_size,
             add_per_round=add_per_round,
             score_scope="sampled_batch",
+            weighted_paths=graph.is_weighted if weighted_paths is None else bool(weighted_paths),
             workers=workers,
             **trace,
         )
@@ -119,6 +121,7 @@ def run(
         weight=graph.edge_weight,
         support_mask=ctx.mask.copy(),
         workers=workers,
+        weighted_paths=weighted_paths,
     )
 
     rounds = 0
@@ -190,6 +193,7 @@ def run(
         mandatory_candidates=mandatory_total,
         score_scope="sampled_batch",
         selection="sampled_topk",
+        weighted_paths=scorer.weighted_paths,
         workers=workers,
         **trace,
     )

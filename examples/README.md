@@ -10,6 +10,7 @@ Run any of these from the repository root.
 | [`04_backbones_and_tuning.py`](04_backbones_and_tuning.py) | Comparing backbone stretch (including LLSF) and tuning the objective | networkx |
 | [`05_local_search_backbone.py`](05_local_search_backbone.py) | LLSF forest refinement and Scaffold growth from that forest | networkx |
 | [`06_variant_animations.py`](06_variant_animations.py) | Five animated methods on one shared RandSF, plus a fixed input and combined 2×3 GIF | matplotlib, Pillow |
+| [`07_weighted_graphs.py`](07_weighted_graphs.py) | Feature-derived weights, weighted growth in all five variants, and distance-based MinSF | NumPy/SciPy; optional scikit-learn |
 
 ```bash
 python examples/01_grid_demo.py --out docs/images
@@ -19,6 +20,8 @@ python examples/03_pytorch_geometric.py --dataset Cora   # downloads Planetoid
 python examples/04_backbones_and_tuning.py
 python examples/05_local_search_backbone.py
 python examples/06_variant_animations.py --out docs/images/variants
+python examples/07_weighted_graphs.py
+# With the metrics extra: python examples/07_weighted_graphs.py --sklearn
 ```
 
 For a fast preview, use `python examples/01_grid_demo.py --quick --out demo-preview`.

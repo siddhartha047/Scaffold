@@ -116,7 +116,8 @@ def run(
         )
 
     if graph.num_edges == 0 or ctx.remaining_budget <= 0:
-        return ctx.finish("fast", selection=selection, rounds=0, scored_candidates=0)
+        return ctx.finish("fast", selection=selection, rounds=0, scored_candidates=0,
+                          weighted_paths=bool(weighted_paths))
 
     # One scoring pass against the backbone forest. Never recomputed: growth
     # does not rebuild the tree index, so the score is static by construction.

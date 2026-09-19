@@ -207,7 +207,7 @@ def from_scipy(matrix, reduce: str = "first") -> Graph:
             f"adjacency matrix must be square, got shape {coo.shape}"
         )
     data = np.asarray(coo.data, dtype=np.float64)
-    weighted = data.size > 0 and not np.allclose(data, 1.0)
+    weighted = data.size > 0 and not np.all(data == 1.0)
     return from_edge_index(
         np.stack((coo.row.astype(np.int64), coo.col.astype(np.int64))),
         num_nodes=int(coo.shape[0]),
@@ -246,7 +246,7 @@ def from_dense(array, reduce: str = "first") -> Graph:
     array = np.asarray(array)
     rows, cols = np.nonzero(array)
     values = array[rows, cols].astype(np.float64)
-    weighted = values.size > 0 and not np.allclose(values, 1.0)
+    weighted = values.size > 0 and not np.all(values == 1.0)
     return from_edge_index(
         np.stack((rows.astype(np.int64), cols.astype(np.int64))),
         num_nodes=int(array.shape[0]),

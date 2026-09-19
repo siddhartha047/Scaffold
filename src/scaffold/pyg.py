@@ -52,7 +52,7 @@ def sparsify_data(
     )
     if method == "sample":
         result = result.draw(keep_ratio=keep_ratio, num_edges=num_edges, seed=seed)
-    return result.to_pyg(copy_from=data)
+    return result.to_pyg()
 
 
 def sample_edge_weight(data, seed=None, **kwargs):
@@ -207,7 +207,7 @@ class ScaffoldResampler:
             result = self.scores.draw(
                 keep_ratio=self.keep_ratio, num_edges=self.num_edges
             )
-            self._cache = result.to_pyg(copy_from=self.data)
+            self._cache = result.to_pyg()
             self._cache_epoch = slot
         return self._cache
 

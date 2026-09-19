@@ -56,7 +56,7 @@ def test_optional_dependencies_are_not_imported_at_module_scope():
     """
     code = (
         "import sys, scaffold;"
-        "leaked = [m for m in ('torch', 'torch_geometric', 'matplotlib', 'networkx')"
+        "leaked = [m for m in ('torch', 'torch_geometric', 'matplotlib', 'networkx', 'sklearn')"
         " if m in sys.modules];"
         "print(','.join(leaked))"
     )
