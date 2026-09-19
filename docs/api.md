@@ -57,6 +57,16 @@ avoid unexpectedly long runs. Use `randst`, `fast-randst`, or `fast-maxst`
 for larger inputs, or explicitly raise LLST's positive-integer
 `backbone_options["max_input_edges"]` limit.
 
+**Trees and forests.** The conventional “tree” names denote **spanning
+forests**: all built-in constructions except `none` build one tree per input
+component, preserving isolated vertices. The full forest has `n − c` edges
+for `n` nodes and `c` components; it is a single spanning tree when `c=1`.
+This describes the initial backbone, not the final support, which may contain
+cycles. The connectivity guarantee requires a budget of at least `n − c`;
+see [partial forests and smaller budgets](backbones.md#max_edges-and-partial-forests).
+Sample's `tree_count` likewise counts randomized forests, each spanning all
+input components, rather than individual component trees.
+
 ### Objective knobs (all variants)
 
 | argument | default | meaning |
@@ -100,8 +110,15 @@ overrides win over it.
 |---|---:|---|
 | `clusters` | `None` | Auto count, an integer count, or per-node labels |
 | `cluster_method` | `"bfs"` | `"bfs"`, `"metis"` (needs `pymetis`), or `"random"` |
-| `sample_size` | `64` | Candidates drawn and scored per cluster per round |
-| `add_per_round` | `8` | Top candidates committed per cluster; must be smaller than `sample_size` |
+| `sample_size` | `None` (auto) | Candidates drawn and scored per cluster per round |
+| `add_per_round` | `None` (auto) | Top candidates committed per cluster; must be smaller than `sample_size` |
+
+With both sizes omitted, Batch uses **64/8 below 1,024 input edges** and
+**256/64 otherwise**. If either option is explicit, the other keeps its
+legacy default (64 candidates or 8 insertions). Larger insertion batches
+reduce the number of growth rounds but may change support quality; pass
+`sample_size=64, add_per_round=8` to reproduce the previous defaults.
+The resolved sizes are included in result metadata.
 
 Batch recomputes shortest-path dilation and congestion within each sampled
 batch against the current support graph. It is the original sampled-growth

@@ -3,6 +3,11 @@
 All five take any supported graph object and the same budget arguments.  The
 first four return the same :class:`~scaffold.result.ScaffoldResult`.
 Swapping one for another is a one-word change.
+
+"Spanning tree" in backbone names means a spanning forest in general:
+one tree per input connected component, with isolated vertices preserved.
+A connected input gives a single tree. This describes the initial backbone;
+the final sparse support may contain cycles after edges are added.
 """
 
 from __future__ import annotations
@@ -100,7 +105,9 @@ def greedy(
     num_edges:
         Exact undirected edge budget.
     backbone:
-        Support backbone; see :mod:`scaffold.backbone`. Default ``"fast-maxst"``.
+        Support spanning forest (one tree per input component); see
+        :mod:`scaffold.backbone`. Default ``"fast-maxst"``. ``"none"``
+        disables the backbone connectivity guarantee.
     seed:
         Seed for any stochastic component (random backbones, tie-breaking
         fallbacks). Never touches the global numpy RNG.
@@ -172,9 +179,12 @@ def batch(
     with the LCA tree kernel, but Batch can react to earlier additions and its
     sampling naturally spreads the retained edges.
 
-    Extra options: ``clusters``, ``cluster_method``, ``sample_size`` (default
-    64), and ``add_per_round`` (default 8).  Keep
-    ``add_per_round < sample_size`` so scoring affects the result.
+    Extra options: ``clusters``, ``cluster_method``, ``sample_size``, and
+    ``add_per_round``. With both sizes omitted, defaults are 64/8 below 1,024
+    input edges and 256/64 otherwise. Larger insertion batches trade more
+    frequent rescoring for speed. Explicit sizes override this policy; if
+    only one is set, the other keeps its legacy default of 64 or 8.
+    Keep ``add_per_round < sample_size`` so scoring affects the result.
     """
     keep_ratio = _resolve_keep_ratio(keep_ratio, target_ratio)
     graph, params, kwargs = _prepare(G, kwargs)

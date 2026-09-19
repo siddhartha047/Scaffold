@@ -25,7 +25,7 @@ def test_version_is_exported():
 
 
 def test_version_matches_pyproject():
-    text = (ROOT / "pyproject.toml").read_text()
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     declared = re.search(r'^version = "([^"]+)"', text, re.MULTILINE).group(1)
     assert declared == scaffold.__version__, (
         "pyproject.toml and src/scaffold/_version.py disagree"
@@ -84,10 +84,24 @@ def test_readme_and_license_are_shipped():
     assert (ROOT / "CHANGELOG.md").is_file()
 
 
-def test_readme_figures_use_existing_repository_files():
+@pytest.mark.parametrize("default_encoding", ["utf-8", "cp1252"])
+def test_readme_figures_use_existing_repository_files(monkeypatch, default_encoding):
     """Private repositories cannot serve unauthenticated raw-GitHub images."""
-    text = (ROOT / "README.md").read_text()
+    original_open = Path.open
+
+    def locale_open(path, mode="r", buffering=-1, encoding=None, errors=None, newline=None):
+        # Exercise the Windows fallback on every CI platform, without forcing
+        # UTF-8 mode globally and hiding locale-dependent reads.
+        if path == ROOT / "README.md" and "b" not in mode and encoding is None:
+            encoding = default_encoding
+        return original_open(path, mode, buffering, encoding, errors, newline)
+
+    monkeypatch.setattr(Path, "open", locale_open)
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
     targets = set(re.findall(r"!\[[^]]*\]\((docs/images/[^)]+\.(?:png|gif))\)", text))
+    targets.update(re.findall(
+        r'''<img\b[^>]*\bsrc=["'](docs/images/[^"']+\.(?:png|gif))["']''', text
+    ))
     expected = {
         "docs/images/grid_methods.png",
         "docs/images/grid_scores.png",
@@ -111,7 +125,7 @@ def test_examples_are_syntactically_valid():
     scripts = sorted((ROOT / "examples").glob("*.py"))
     assert scripts, "no examples found"
     for path in scripts:
-        ast.parse(path.read_text(), filename=str(path))
+        ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
 
 def test_validation_scripts_are_syntactically_valid():
@@ -120,7 +134,7 @@ def test_validation_scripts_are_syntactically_valid():
     scripts = sorted((ROOT / "validation").glob("*.py"))
     assert scripts, "no validation scripts found"
     for path in scripts:
-        ast.parse(path.read_text(), filename=str(path))
+        ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
 
 def test_public_functions_have_docstrings():

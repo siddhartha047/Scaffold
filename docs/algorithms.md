@@ -14,6 +14,12 @@ SCAFFOLD answers it differently, in two stages.
 forest with `n − c` edges has, by construction, exactly the connected components
 of `G`. Nothing else is guaranteed for free, and this one is cheap.
 
+Here `c` counts input components, including isolated vertices. “Tree” in the
+backbone names and tree-scoring descriptions means this forest in general:
+one tree per component, or a single tree on connected inputs. The forest is
+the initial backbone; adding further input edges can create cycles in the
+final support without joining separate input components.
+
 **Stage 2 — spend the rest on what hurts most.** For each edge `e = (u, v)` not
 yet in the support graph `H`, ask what its absence costs:
 
@@ -140,6 +146,13 @@ result = scaffold.batch(G, keep_ratio=0.2,
                         add_per_round=8,
                         clusters=None)
 ```
+
+The explicit sizes above reproduce the original 64/8 configuration. With both
+sizes omitted, inputs with at least 1,024 undirected edges use 256 candidates
+and 64 insertions per cluster; smaller inputs keep 64/8. This reduces repeated
+searches and allows parallel scoring on larger batches. If only one size is
+specified, the other retains its legacy default. Batch partitions candidate
+edge IDs once and filters each cluster locally as edges are retained.
 
 The next round sees the edges just added, so its paths and scores can change.
 That makes Batch more adaptive and more spatially spread than one global top-k,
@@ -295,6 +308,11 @@ you want edge importances rather than one fixed subgraph.
 
 ## Choosing
 
+Use [runtime expectations](performance.md) alongside this guide. Fast and
+Sample are the practical starting points for graphs with millions of nodes.
+Batch can adapt to insertions, but it searches the whole evolving support;
+its candidate clusters do not limit the shortest-path search domain.
+
 ```
 Do you want one fixed graph, or a fresh one per epoch?
 │
@@ -323,6 +341,11 @@ For `n` nodes, `m` edges, budget `M`, heap width `k`, forest count `R`:
 ---
 
 ## Measured behaviour
+
+For worker scaling and large-graph planning, see the separate
+[runtime guide](performance.md). The small-graph quality comparisons below
+serve a different purpose and should not be extrapolated linearly to large
+graphs, especially for the dynamic methods.
 
 Quality here is measured on the **result**, with `path_scores` against the
 final sparsified subgraph — not against the backbone the score was computed

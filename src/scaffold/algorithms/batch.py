@@ -38,8 +38,8 @@ def run(
     seed=None,
     clusters=None,
     cluster_method: str = "bfs",
-    sample_size: int = 64,
-    add_per_round: int = 8,
+    sample_size: Optional[int] = None,
+    add_per_round: Optional[int] = None,
     backbone_options=None,
     workers=None,
     verbose: bool = False,
@@ -49,7 +49,19 @@ def run(
     ``sample_size`` candidates are drawn per cluster and scored together;
     only the best ``add_per_round`` are added.  Keep
     ``add_per_round < sample_size`` so the score actually affects selection.
+
+    With neither size specified, use 64/8 on inputs below 1,024 edges and
+    256/64 on larger inputs. Larger batches amortize searches and enable the
+    parallel path kernel, at the cost of less frequent support updates.
+    If either option is explicit, the omitted option keeps its legacy default
+    (64 sampled candidates or 8 insertions).
     """
+    automatic = sample_size is None and add_per_round is None
+    large_batch = automatic and graph.num_edges >= 1024
+    if sample_size is None:
+        sample_size = 256 if large_batch else 64
+    if add_per_round is None:
+        add_per_round = 64 if large_batch else 8
     sample_size = int(sample_size)
     add_per_round = int(add_per_round)
     if sample_size < 2:
@@ -87,6 +99,12 @@ def run(
     node_labels = assign_clusters(graph, clusters, method=cluster_method, seed=seed)
     edge_cluster = cluster_edges(graph, node_labels)
     cluster_ids = np.unique(edge_cluster)
+    # Partition once instead of scanning all m edges for each cluster in
+    # every round. Stable ordering preserves seeded sampling and tie breaks.
+    edge_order = np.argsort(edge_cluster, kind="stable")
+    boundaries = np.flatnonzero(np.diff(edge_cluster[edge_order])) + 1
+    cluster_pools = np.split(edge_order, boundaries)
+    cluster_pools = [pool[~ctx.mask[pool]] for pool in cluster_pools]
     degree = selected_degrees(graph.num_nodes, graph.src, graph.dst, ctx.mask)
     scorer = PathScorer(
         graph.num_nodes,
@@ -101,16 +119,20 @@ def run(
     sampled_total = 0
     scored_total = 0
     mandatory_total = 0
-    while ctx.remaining_budget > 0:
+    while True:
+        remaining = ctx.remaining_budget
+        if remaining <= 0:
+            break
         rounds += 1
         rng = np.random.default_rng(
             None if seed is None else np.random.SeedSequence([int(seed), rounds])
         )
         selected = []
-        for cid in cluster_ids:
-            if len(selected) >= ctx.remaining_budget:
+        for index, pool in enumerate(cluster_pools):
+            if len(selected) >= remaining:
                 break
-            pool = np.flatnonzero((edge_cluster == cid) & ~ctx.mask)
+            pool = pool[~ctx.mask[pool]]
+            cluster_pools[index] = pool
             if pool.size == 0:
                 continue
             batch = degree_weighted_sample(
@@ -128,7 +150,7 @@ def run(
             limit = min(
                 add_per_round,
                 int(batch.size),
-                ctx.remaining_budget - len(selected),
+                remaining - len(selected),
             )
             selected.extend(batch[order[:limit]].tolist())
 

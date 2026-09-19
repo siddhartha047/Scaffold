@@ -1,10 +1,13 @@
 """Support backbones: the spanning forest every SCAFFOLD run starts from.
 
-SCAFFOLD grows a sparsifier by *adding* edges to a connected skeleton rather
-than by deleting edges from ``G``. The skeleton -- the *support backbone* -- is
-a spanning forest, so as long as the edge budget is at least ``n - c`` the
+SCAFFOLD starts from a spanning forest of ``G`` and *adds* edges. This
+support backbone has one tree per input connected component, including
+isolated vertices as one-node trees. "Spanning tree" in conventional method
+names is shorthand for this forest; a connected input gives a single tree.
+As long as the edge budget is at least ``n - c`` the
 output has exactly the connected components of the input. Everything above that
 floor is spent on the edges that most reduce dilation and congestion.
+The final sparse support may contain cycles; the initial backbone is acyclic.
 
 Available backbones
 -------------------
@@ -27,10 +30,10 @@ Available backbones
 ``spt``         Multi-source shortest-path (BFS) forest from the highest-degree
                 node of each component. Low diameter, useful when you care more
                 about hop distance than about edge weight.
-``glst``        Greedy low-stretch tree. Highest quality, ``O(n * m * |cut|)``:
+``glst``        Greedy low-stretch forest. ``O(n * m * |cut|)``:
                 small graphs only.
-``llst``        Local-search low-stretch forest. Improves an initial tree with
-                edge swaps; exact by default, with optional sampling. Small
+``llst``        Local-search low-stretch forest. Improves each component's tree
+                with edge swaps; exact by default, with optional sampling. Small
                 graphs only; limited to 1,000 input edges by default. Requires
                 the NetworkX extra.
 ``none``        Start from the empty graph. Connectivity is then *not*
@@ -130,6 +133,12 @@ def build_backbone(
     **options,
 ) -> np.ndarray:
     """Return a boolean mask over ``graph.edge_index`` selecting the backbone.
+
+    Despite their conventional "tree" names, built-in constructions other
+    than ``none`` return a spanning forest: one tree per input component,
+    with ``n - c`` edges when the budget permits. Isolated vertices remain
+    in ``graph`` even though they contribute no selected edges. Connected
+    input is the special case of one spanning tree.
 
     ``backbone`` may be a registered name, a boolean mask, an array of edge
     ids, or a callable with the signature described in :func:`register_backbone`.

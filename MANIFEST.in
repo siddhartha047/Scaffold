@@ -4,7 +4,7 @@ include LICENSE
 include README.md
 include RELEASING.md
 recursive-include benchmarks *.py
-recursive-include docs *.md *.png
+recursive-include docs *.md *.png *.gif *.json
 recursive-include examples *.md *.py
 recursive-include tests *.py
 recursive-include validation *.py
