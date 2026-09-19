@@ -27,6 +27,33 @@ from scaffold.backbone import (
 # ----------------------------------------------------------------------
 # budget
 # ----------------------------------------------------------------------
+@pytest.mark.parametrize("weighted", [False, True])
+def test_greedy_trace_matches_each_budgeted_run(weighted):
+    graph = scaffold.grid_graph(3, 3, weight="random" if weighted else None, seed=3)
+    backbone = build_backbone(graph, "RandSF", seed=5)
+    options = dict(backbone=backbone, seed=5, workers=1)
+    traced = scaffold.greedy(graph, num_edges=graph.num_edges, return_trace=True, **options)
+    plain = scaffold.greedy(graph, num_edges=graph.num_edges, **options)
+    assert "added_edge_ids" not in plain.metadata
+    np.testing.assert_array_equal(traced.mask, plain.mask)
+    order = traced.metadata["added_edge_ids"]
+    assert len(order) == graph.num_edges - backbone.sum() == traced.metadata["rounds"]
+    mask = backbone.copy()
+    for edge in order:
+        assert not mask[edge]
+        mask[edge] = True
+        reference = scaffold.greedy(graph, num_edges=int(mask.sum()), **options)
+        np.testing.assert_array_equal(mask, reference.mask)
+    assert mask.all()
+
+
+@pytest.mark.parametrize("options", [{"num_edges": 2}, {"num_edges": 12, "max_rounds": 0}])
+def test_greedy_trace_is_empty_when_no_edges_are_added(options):
+    graph = scaffold.grid_graph(3, 3)
+    result = scaffold.greedy(graph, backbone="RandSF", seed=5, return_trace=True, **options)
+    assert result.metadata["added_edge_ids"] == []
+
+
 @pytest.mark.parametrize("method", ALL_METHODS)
 @pytest.mark.parametrize("keep_ratio", [0.6, 0.75, 0.9, 1.0])
 def test_budget_is_exact(grid, method, keep_ratio):

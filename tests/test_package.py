@@ -108,6 +108,7 @@ def test_readme_figures_use_existing_repository_files(monkeypatch, default_encod
         "docs/images/grid_coverage.png",
         "docs/images/grid_backbones.png",
         "docs/images/grid_ratios.png",
+        "docs/images/grid_ratios.gif",
         "docs/images/grid_backbones.gif",
         "docs/images/grid_coverage.gif",
     }

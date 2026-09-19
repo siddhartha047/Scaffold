@@ -20,6 +20,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Animated README opening demo: five fixed grid panels and a RandSF backbone
+  growing to the full graph through every Scaffold-Greedy insertion. The
+  accompanying JSON records the forest, fixed budgets, and insertion sequence.
+- Opt-in Greedy `return_trace=True` records `metadata["added_edge_ids"]` in
+  insertion order without retaining a trace by default.
 - Forest notation is now the primary naming in README/API guides, runnable
   examples, help text, and low-stretch progress messages. `SF`, `MaxSF`, `LLSF`,
   and compact `FastMaxSF`/`FastRandSF` forms work alongside historical names.

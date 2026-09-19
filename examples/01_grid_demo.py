@@ -10,12 +10,12 @@ The method and sampling demos share a seeded RandSF backbone. The opening
 budget demo uses Scaffold-Greedy with RandSF; the backbone comparison shows
 each named construction separately.
 
-Produces five grid figures, backbone and resampling GIFs, and measurements in
-``grid_backbones.json`` and ``grid_coverage.json``:
+Produces five grid figures, backbone/growth/resampling GIFs, and measurements
+in ``grid_backbones.json``, ``grid_ratios.json``, and ``grid_coverage.json``:
 
 1. ``grid_backbones.png``  -- what each support backbone looks like
 2. ``grid_methods.png``    -- the five algorithms at the same budget
-3. ``grid_ratios.png``     -- SCAFFOLD-Greedy with RandSF as the budget tightens
+3. ``grid_ratios.png/gif`` -- four budgets and RandSF growing one edge at a time
 4. ``grid_scores.png``     -- SCAFFOLD-Sample's per-edge weights
 5. ``grid_coverage.png``   -- what per-epoch resampling covers over time
 """
@@ -304,19 +304,29 @@ def _gif_frame(fig):
     return Image.fromarray(np.asarray(fig.canvas.buffer_rgba())[:, :, :3].copy())
 
 
-def _save_gif(frames, out_dir, name, duration=500, final_hold=2500):
+def _save_gif(frames, out_dir, name, duration=500, final_hold=2500,
+              first_hold=None, disposal=2):
     # A shared palette prevents color flicker across frames.
-    first = frames[0].quantize(colors=128)
-    frames = [first] + [frame.quantize(palette=first, dither=0) for frame in frames[1:]]
+    first = frames[0] if frames[0].mode == "P" else frames[0].quantize(colors=128)
+    palette = first.getpalette()
+    frames = [first] + [
+        frame if frame.mode == "P" and frame.getpalette() == palette
+        else frame.convert("RGB").quantize(palette=first, dither=0)
+        for frame in frames[1:]
+    ]
+    durations = [duration] * (len(frames) - 1) + [final_hold]
+    if first_hold is not None and len(frames) > 1:
+        durations[0] = first_hold
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, name)
     first.save(
         path,
         save_all=True,
         append_images=frames[1:],
-        duration=[duration] * (len(frames) - 1) + [final_hold],
+        duration=durations,
         loop=0,
-        disposal=2,
+        disposal=disposal,
+        **({"optimize": False} if disposal == 1 else {}),
     )
     print(f"  wrote {path}")
     return path
@@ -355,29 +365,50 @@ def figure_methods(graph, positions, out_dir):
 
 
 def figure_ratios(graph, positions, out_dir):
-    """README overview: the input and five progressively smaller budgets."""
+    """Four fixed budgets plus RandSF growing through actual Greedy insertions."""
     import matplotlib.pyplot as plt
+    from matplotlib.collections import LineCollection
     from matplotlib.lines import Line2D
     from matplotlib.patches import FancyBboxPatch
 
-    delta_min = (graph.num_nodes - 1) / graph.num_edges
-    # Share the same seeded random forest across every edge budget.
     backbone = build_backbone(graph, DEMO_BACKBONE, seed=SEED)
-    ratios = [0.85, 0.75, 0.65, 0.55, 0.45]
-    panels = [("Input grid", f"{graph.num_edges} edges", None, False)]
-    for ratio in ratios:
-        result = scaffold.greedy(
-            graph, keep_ratio=ratio, backbone=backbone, seed=SEED
-        )
-        components = result.num_components()
-        detail = "connected" if components == 1 else _count_label(components, "component")
-        panels.append(
-            (f"{ratio:.0%} retained", f"{result.sparse_edges} edges · {detail}",
-             result.mask, ratio < delta_min)
-        )
-        print(f"  {ratio:.0%}: {result.sparse_edges} edges, {components} components")
+    forest_edges = int(backbone.sum())
+    forest_fraction = forest_edges / graph.num_edges
+    # Record one real run instead of repeatedly rescoring every earlier prefix.
+    complete = scaffold.greedy(
+        graph, num_edges=graph.num_edges, backbone=backbone,
+        seed=SEED, return_trace=True,
+    )
+    additions = np.asarray(complete.metadata["added_edge_ids"], dtype=np.int64)
+    assert len(additions) == graph.num_edges - forest_edges
+    assert len(np.unique(additions)) == len(additions) and not backbone[additions].any()
+    assert complete.mask.all()
 
-    fig = plt.figure(figsize=(12, 8.4), facecolor="white")
+    ratios = [0.85, 0.75, 0.65, 0.55]
+    panels = [("Input grid", f"{graph.num_edges} edges", None, False)]
+    measurements = []
+    for ratio in ratios:
+        budget = int(np.ceil(ratio * graph.num_edges - 1e-12))
+        if budget >= forest_edges:
+            mask = backbone.copy()
+            mask[additions[:budget - forest_edges]] = True
+            components = graph.num_nodes - forest_edges
+        else:
+            # Small --quick grids can put the 55% panel below the forest budget.
+            partial = scaffold.greedy(graph, num_edges=budget, backbone=backbone, seed=SEED)
+            mask, components = partial.mask, partial.num_components()
+        detail = "connected" if components == 1 else _count_label(components, "component")
+        panels.append((f"{ratio:.0%} retained", f"{budget} edges · {detail}",
+                       mask, budget < forest_edges))
+        measurements.append({"target_ratio": ratio, "edges": budget,
+                             "components": components,
+                             "retained_edge_ids": np.flatnonzero(mask).tolist()})
+        print(f"  {ratio:.0%}: {budget} edges, {components} components", flush=True)
+    panels.append(("Random spanning forest",
+                   f"{forest_edges} edges · {forest_fraction:.1%} retained",
+                   backbone.copy(), False))
+
+    fig = plt.figure(figsize=(12, 8.4), dpi=120, facecolor="white")
     fig.text(.035, .955, "Scaffold", fontsize=29, fontweight="bold", color="#1f5fbf")
     fig.text(.035, .915, "Reduce the edge budget. Keep every node.",
              fontsize=14, color="#4b5563")
@@ -385,12 +416,13 @@ def figure_ratios(graph, positions, out_dir):
              ha="right", fontsize=11, color="#4b5563")
     fig.legend(
         handles=[
-            Line2D([0], [0], color="#1f5fbf", lw=2, label="Retained edge"),
-            Line2D([0], [0], color="#a5abb5", lw=1.4,
-                   linestyle=(0, (2, 2)), label="Omitted edge"),
+            Line2D([0], [0], color="#1f5fbf", lw=2, label="Retained"),
+            Line2D([0], [0], color="#c8ccd4", lw=1.4,
+                   linestyle=(0, (2, 2)), label="Omitted"),
+            Line2D([0], [0], color="#e07829", lw=2.5, label="Added this step"),
         ],
         loc="upper right", bbox_to_anchor=(.972, .938), frameon=False,
-        ncol=2, fontsize=10, handlelength=2, columnspacing=1.4,
+        ncol=3, fontsize=10, handlelength=2, columnspacing=1.2,
     )
 
     for index, (title, detail, mask, below_floor) in enumerate(panels):
@@ -400,24 +432,89 @@ def figure_ratios(graph, positions, out_dir):
         fig.add_artist(FancyBboxPatch(
             (left, bottom), width, height, transform=fig.transFigure,
             boxstyle="round,pad=0.007,rounding_size=0.012",
-            facecolor="#f4f7fc" if index == 0 else "#fafbfc",
-            edgecolor="#dce3ed", linewidth=.8, zorder=0,
+            facecolor="#f4f7fc" if index in (0, 5) else "#fafbfc",
+            edgecolor="#b8ccec" if index == 5 else "#dce3ed",
+            linewidth=1.1 if index == 5 else .8, zorder=0,
         ))
         color = "#b45309" if below_floor else "#1f5fbf"
-        fig.text(left + width / 2, bottom + .352, title,
-                 ha="center", fontsize=20, fontweight="semibold", color=color)
-        fig.text(left + width / 2, bottom + .320, detail,
-                 ha="center", fontsize=11,
-                 color="#b45309" if below_floor else "#4b5563")
+        title_artist = fig.text(left + width / 2, bottom + .352, title,
+                               ha="center", fontsize=18 if index == 5 else 20,
+                               fontweight="semibold", color=color)
+        detail_artist = fig.text(left + width / 2, bottom + .320, detail,
+                                ha="center", fontsize=11,
+                                color="#b45309" if below_floor else "#4b5563")
         ax = fig.add_axes([left + .012, bottom + .010, width - .024, .299])
         viz.draw_graph(graph, positions=positions, ax=ax, mask=mask,
                        node_size=10, linewidth=1.7)
+        if index == 5:
+            growth_ax, growth_title, growth_detail = ax, title_artist, detail_artist
+            growth_box = [left, bottom, left + width, bottom + height]
 
     fig.text(.5, .024,
-             f"Connectivity needs at least {delta_min:.1%} of this grid's edges; "
-             "smaller budgets split it into components.",
+             f"RandSF starts at {forest_edges} edges ({forest_fraction:.1%}). "
+             "Greedy adds one edge per step in the bottom-right panel.",
              ha="center", fontsize=11, color="#4b5563")
-    return _save(fig, out_dir, "grid_ratios.png", dpi=200)
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, "grid_ratios.png")
+    fig.savefig(path, dpi=200, bbox_inches="tight", facecolor="white")
+    print(f"  wrote {path}", flush=True)
+
+    # Only these artists change; the five reference panels stay pixel-identical.
+    for collection in list(growth_ax.collections):
+        if isinstance(collection, LineCollection):
+            collection.remove()
+    positions_array = np.asarray(positions)
+    segments = np.stack((positions_array[graph.src], positions_array[graph.dst]), axis=1)
+    omitted = LineCollection(segments[~backbone], colors="#c8ccd4", linewidths=1.02,
+                             linestyles=(0, (2, 2)), zorder=1)
+    retained = LineCollection(segments[backbone], colors="#1f5fbf", linewidths=1.7, zorder=3)
+    newest = LineCollection([], colors="#e07829", linewidths=2.7, zorder=3.5)
+    for collection in (omitted, retained, newest):
+        growth_ax.add_collection(collection)
+    first = _gif_frame(fig).quantize(colors=256)
+    frames = [first]
+    pixel_width, pixel_height = first.size
+    growth_pixels = (
+        int(np.floor(growth_box[0] * pixel_width)),
+        int(np.floor((1 - growth_box[3]) * pixel_height)),
+        int(np.ceil(growth_box[2] * pixel_width)),
+        int(np.ceil((1 - growth_box[1]) * pixel_height)),
+    )
+    mask = backbone.copy()
+    for step, edge_id in enumerate(additions, 1):
+        mask[edge_id] = True
+        omitted.set_segments(segments[~mask])
+        retained.set_segments(segments[mask])
+        newest.set_segments(segments[[edge_id]])
+        growth_title.set_text("Full graph" if step == len(additions) else "Greedy growth")
+        count = forest_edges + step
+        growth_detail.set_text(f"Step {step} · {count} edges · {count / graph.num_edges:.1%}")
+        # Quantize immediately to keep 122 frames comfortably below RGB memory cost.
+        rendered = _gif_frame(fig).quantize(palette=first, dither=0)
+        # Palette lookup can slightly alter static pixels; freeze them explicitly.
+        frame = first.copy()
+        frame.paste(rendered.crop(growth_pixels), growth_pixels)
+        frames.append(frame)
+    plt.close(fig)
+    _save_gif(frames, out_dir, "grid_ratios.gif", duration=100,
+              first_hold=1600, final_hold=2400, disposal=1)
+
+    data = {
+        "method": "greedy", "backbone": canonical_backbone_name(DEMO_BACKBONE),
+        "num_nodes": graph.num_nodes, "num_edges": graph.num_edges, "seed": SEED,
+        "backbone_edges": forest_edges, "backbone_fraction": forest_fraction,
+        "backbone_edge_ids": np.flatnonzero(backbone).tolist(),
+        "added_edge_ids": additions.tolist(), "fixed_panels": measurements,
+        "frame_edge_counts": list(range(forest_edges, graph.num_edges + 1)),
+        "frame_count": len(frames), "gif_size": list(first.size),
+        "animated_panel_figure_bounds": growth_box,
+    }
+    data_path = os.path.join(out_dir, "grid_ratios.json")
+    with open(data_path, "w", encoding="utf-8") as stream:
+        json.dump(data, stream, indent=2)
+        stream.write("\n")
+    print(f"  wrote {data_path}: {len(additions)} single-edge additions", flush=True)
+    return path
 
 
 def figure_scores(graph, positions, out_dir):

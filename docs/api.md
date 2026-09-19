@@ -98,6 +98,7 @@ overrides win over it.
 |---|---|---|
 | `batch_size` | `1` | edges committed per rescoring round |
 | `max_rounds` | `None` | safety cap on rescoring rounds |
+| `return_trace` | `False` | include `metadata["added_edge_ids"]` in insertion order; one edge per step when `batch_size=1` |
 | `verbose` | `False` | per-round progress |
 
 ### `scaffold.heap` extras

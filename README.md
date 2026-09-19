@@ -2,11 +2,12 @@
 
 **Reduce the edge budget. Keep every node.**
 
-![Scaffold on a grid: input, then 85%, 75%, 65%, 55%, and 45% edge retention](docs/images/grid_ratios.png)
+![Scaffold-Greedy: five fixed reference panels while RandSF grows to the full graph one edge at a time](docs/images/grid_ratios.gif)
 
-Scaffold-Greedy with a seeded random spanning forest (RandSF) backbone. Blue edges
-are retained; gray dashes are omitted. The 45% view illustrates a budget below
-this grid's connectivity floor; all 144 nodes remain.
+Scaffold-Greedy starts from a random spanning forest (RandSF): **143 edges,
+54.2% of the input**. The bottom-right panel adds one edge per step until the
+full graph is restored; the other five panels stay fixed. Blue edges are
+retained, gray dashes are omitted, and orange highlights the newest addition.
 
 Scaffold is a **dilation- and congestion-aware graph sparsification** package.
 It builds a sparse graph in two stages: choose a **support backbone**
@@ -628,12 +629,13 @@ compares repeated draws with a single fixed support through epoch 50.
 
 ### Reduce the edge budget
 
-The opening grid compares Scaffold-Greedy at **85%, 75%, 65%, 55%, and 45%**
-edge retention using the same seeded **RandSF backbone** (seed 0). Connectivity is preserved while
-the budget can hold a spanning tree. This graph requires at least **143 retained edges (54.2% of
-its edges)**; the 45% view keeps 119 edges and has 25 connected components.
+The opening grid keeps the input and **85%, 75%, 65%, and 55%** retention
+views fixed. Its sixth panel starts at the shared **RandSF backbone**
+(143 edges, **54.2%**, seed 0), then follows all **121 actual Greedy insertions**
+to the full 264-edge graph. Every frame preserves all 144 nodes and connectivity.
+The still image below shows the starting forest; the opening GIF shows the growth.
 
-![Input and five retention ratios in a two-by-three grid](docs/images/grid_ratios.png)
+![Input, four edge budgets, and a random spanning forest retaining 54.2% of edges](docs/images/grid_ratios.png)
 
 ### Reproduce the demos
 
@@ -652,9 +654,10 @@ python examples/01_grid_demo.py --only ratios --out docs/images
 python examples/01_grid_demo.py --quick --out demo-preview
 ```
 
-The generator writes five PNGs, two GIFs, and the
+The generator writes five PNGs, three GIFs, and the
 [backbone](docs/images/grid_backbones.json) and
-[resampling](docs/images/grid_coverage.json) measurements. These are illustrative
+[resampling](docs/images/grid_coverage.json) measurements, plus the
+[Greedy growth trace](docs/images/grid_ratios.json). These are illustrative
 grid simulations; their quality rankings need not hold on other graphs.
 
 ---

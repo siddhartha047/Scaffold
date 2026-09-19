@@ -43,8 +43,8 @@ and differences between backbones easy to inspect. The examples use the same
 graph and seed so that the effects of each method are visible.
 The method and sampling demos share a seeded `randsf` backbone (`fixed-randsf`
 for Sample). The opening edge-budget demo uses Scaffold-Greedy with a RandSF
-backbone, built once and reused across all five ratios. The backbone comparison
-still shows each named construction.
+backbone, built once and reused across the fixed budgets and growing panel.
+The backbone comparison shows each named construction.
 
 These grid inputs are unweighted and connected, so each forest in the figures
 is a single spanning tree. The display labels use RandSF, MaxSF, SPF, GLSF,
@@ -54,14 +54,15 @@ compute **spanning forests** on disconnected inputs: one tree per component, wit
 vertices preserved. Only the backbone must be acyclic; the final sparse
 support can include additional edges and cycles.
 
-`01_grid_demo.py` writes five PNG figures and two GIFs to `docs/images/`:
+`01_grid_demo.py` writes five PNG figures and three GIFs to `docs/images/`:
 
 | file | shows |
 |---|---|
 | `grid_backbones.png` | input grid and seven backbones, with full method names and measured stretch |
 | `grid_backbones.gif` | animated comparison of the same seven completed forests; each frame expands the name and explains construction; LLSF is last |
 | `grid_methods.png` | input and five algorithms at one budget in a 2×3 grid |
-| `grid_ratios.png` | README opening visual: input, then 85%, 75%, 65%, 55%, and 45% retention with Greedy and RandSF, in a 2×3 grid |
+| `grid_ratios.png` | Input, 85%, 75%, 65%, and 55% Greedy supports, plus the RandSF backbone at 54.2%, in a 2×3 grid |
+| `grid_ratios.gif` | The same layout with five panels fixed; the sixth grows from RandSF to the full graph, one actual Greedy insertion per frame |
 | `grid_scores.png` | input, Sample weights, inclusion probabilities, and one draw in a 2×2 grid |
 | `grid_coverage.png` | three union snapshots and the coverage curve in a 2×2 grid |
 | `grid_coverage.gif` | a 2×2 animation of input, current view, cumulative union, and coverage |
@@ -74,8 +75,14 @@ python examples/01_grid_demo.py --only backbones --out docs/images
 
 Regenerate the README's opening budget visual with
 `python examples/01_grid_demo.py --only ratios --out docs/images`.
-Every panel keeps all 144 nodes. The 45% panel has 25 components because
-its budget is below this grid's connectivity floor (143 edges, or 54.2%).
+This writes both the still PNG and the GIF. The sixth panel starts at
+**Random spanning forest: 143 edges, 54.2% retained**. The GIF
+holds that forest, shows all 121 Greedy additions, pauses on the full graph,
+and loops. Orange marks each newly added edge. All other panels stay fixed;
+every main-demo frame keeps 144 nodes and remains connected.
+`grid_ratios.json` records the backbone, insertion order, fixed supports,
+frame edge counts, and animated panel bounds. The trace comes from one
+`scaffold.greedy(..., return_trace=True)` run, without repeated full-prefix runs.
 
 It also writes `grid_backbones.json` with the seed, LLSF options, retained edge
 IDs, edge counts, component counts, and omitted-edge stretch for each forest. LLSF uses the

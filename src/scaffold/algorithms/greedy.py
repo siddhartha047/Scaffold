@@ -41,6 +41,7 @@ def run(
     max_rounds: Optional[int] = None,
     workers=None,
     verbose: bool = False,
+    return_trace: bool = False,
 ):
     """Grow the support one (or ``batch_size``) best-scoring edge at a time.
 
@@ -52,6 +53,9 @@ def run(
         expensive part is the rescoring, not the insertion.
     max_rounds:
         Optional cap on rescoring rounds, as a safety valve on larger graphs.
+    return_trace:
+        Include ``added_edge_ids`` in metadata, in insertion order. With the
+        default ``batch_size=1``, each entry is one Greedy rescoring step.
     """
     ctx = GrowthContext(
         graph,
@@ -76,6 +80,7 @@ def run(
 
     rounds = 0
     scored_total = 0
+    added_edge_ids = [] if return_trace else None
     while ctx.remaining_budget > 0:
         if max_rounds is not None and rounds >= max_rounds:
             break
@@ -97,6 +102,8 @@ def run(
 
         ctx.add(chosen)
         scorer.add_edges(chosen)
+        if added_edge_ids is not None:
+            added_edge_ids.extend(chosen.tolist())
 
         if verbose:
             best = order[0]
@@ -113,4 +120,5 @@ def run(
         scored_candidates=scored_total,
         batch_size=batch_size,
         workers=workers,
+        **({"added_edge_ids": added_edge_ids} if return_trace else {}),
     )
