@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Shorter README with one runtime table, explicit Fast + Fast-RandSF starting
+  examples, framework integration instructions, compact backbone descriptions,
+  and smaller resampling GIF display. Detailed guidance remains in `docs/`.
+
 ### Fixed
 
 - Windows CI now reads repository text explicitly as UTF-8. The README image
