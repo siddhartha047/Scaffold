@@ -26,6 +26,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Five method GIFs and a combined 2×3 animation on one shared RandSF backbone:
+  real Greedy/Heap/Batch growth, grouped reveals of Fast's static selection,
+  and repeated Sample draws. Includes exact state records and a fixed input PNG.
+- Opt-in Heap/Batch insertion traces (`return_trace=True`), including edge IDs
+  and round sizes, without changing selection or storing history by default.
 - Animated README opening demo: five fixed grid panels and a RandSF backbone
   growing to the full graph through every Scaffold-Greedy insertion. The
   accompanying JSON records the forest, fixed budgets, and insertion sequence.

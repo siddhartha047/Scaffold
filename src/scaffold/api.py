@@ -153,7 +153,8 @@ def heap(
     The practical choice for mid-sized graphs.
 
     Extra options: ``top_k``, ``add_per_round``, ``clusters``,
-    ``cluster_method``, ``local_radius``, ``dirty_limit``, ``score_form``.
+    ``cluster_method``, ``local_radius``, ``dirty_limit``, ``score_form``,
+    ``return_trace`` (record added edge ids and per-insertion-round sizes).
     """
     keep_ratio = _resolve_keep_ratio(keep_ratio, target_ratio)
     graph, params, kwargs = _prepare(G, kwargs)
@@ -185,7 +186,8 @@ def batch(
     sampling naturally spreads the retained edges.
 
     Extra options: ``clusters``, ``cluster_method``, ``sample_size``, and
-    ``add_per_round``. With both sizes omitted, defaults are 64/8 below 1,024
+    ``add_per_round``, plus ``return_trace`` to record added edge ids and
+    per-insertion-round sizes. With both sizes omitted, defaults are 64/8 below 1,024
     input edges and 256/64 otherwise. Larger insertion batches trade more
     frequent rescoring for speed. Explicit sizes override this policy; if
     only one is set, the other keeps its legacy default of 64 or 8.

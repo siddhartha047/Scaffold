@@ -222,6 +222,29 @@ backbones can be passed as masks or registered with `scaffold.register_backbone`
 Unweighted **12×12 grid: 144 nodes, 264 edges**, seed 0. These connected-grid
 examples use RandSF for the method and sampling comparisons.
 
+### Watch each method
+
+All five use the **same seeded RandSF backbone** and a **191-edge budget**.
+Greedy, Heap, and Batch show real insertion rounds. Fast reveals its one-pass
+selection in groups; Sample draws different supports at the same budget.
+Orange marks new edges. Animation timing is illustrative.
+
+<table>
+  <tr>
+    <td><a href="docs/images/variants/input.png"><img src="docs/images/variants/input.png" width="280" alt="Fixed input graph: 144 nodes and 264 edges"></a></td>
+    <td><a href="docs/images/variants/greedy.gif"><img src="docs/images/variants/greedy.gif" width="280" alt="Scaffold-Greedy grows from RandSF one best edge at a time"></a></td>
+    <td><a href="docs/images/variants/heap.gif"><img src="docs/images/variants/heap.gif" width="280" alt="Scaffold-Heap grows from the same RandSF while refreshing cached scores"></a></td>
+  </tr>
+  <tr>
+    <td><a href="docs/images/variants/batch.gif"><img src="docs/images/variants/batch.gif" width="280" alt="Scaffold-Batch adds the top four edges from each sampled batch"></a></td>
+    <td><a href="docs/images/variants/fast.gif"><img src="docs/images/variants/fast.gif" width="280" alt="Scaffold-Fast scores once and reveals its selected edges in groups"></a></td>
+    <td><a href="docs/images/variants/sample.gif"><img src="docs/images/variants/sample.gif" width="280" alt="Scaffold-Sample draws different 191-edge supports around the fixed RandSF"></a></td>
+  </tr>
+</table>
+
+[Combined GIF](docs/images/variants/variants.gif) ·
+[Reproduce these animations](examples/README.md#variant-animations).
+
 ### Resample a sparse view each epoch
 
 Each view retains **191 edges** and stays connected. The union reaches
@@ -235,7 +258,7 @@ view, cumulative union, and coverage.
 </p>
 
 <details>
-<summary>Compare support backbones and the five algorithms</summary>
+<summary>Compare support backbones</summary>
 
 Backbone panels expand each name; all retain 143 edges. Blue edges are
 retained and gray dashes are omitted.
@@ -248,11 +271,6 @@ retained and gray dashes are omitted.
   </a>
 </p>
 
-At 72% retention, all five algorithms keep 191 edges. Pale red marks the
-shared RandSF backbone; bold blue marks added edges.
-
-![Input and five Scaffold outputs at the same edge budget](docs/images/grid_methods.png)
-
 </details>
 
 Reproduce from a checkout:
@@ -260,7 +278,8 @@ Reproduce from a checkout:
 ```bash
 pip install -e ".[viz,speed]"
 python examples/01_grid_demo.py --out docs/images
-# Select --only coverage / --only backbones; add --quick for a smaller preview.
+python examples/06_variant_animations.py --out docs/images/variants
+# Script 01 accepts --only coverage / --only backbones; both accept --quick.
 ```
 
 [All demos, settings, and recorded measurements](examples/README.md).
