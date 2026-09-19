@@ -117,7 +117,9 @@ def greedy(
     **kwargs:
         Objective knobs (``alpha``, ``beta_edge``, ``beta_node``,
         ``edge_norm_p``, ``node_norm_q``) and algorithm options
-        (``batch_size``, ``max_rounds``, ``verbose``).
+        (``batch_size``, ``max_rounds``, ``verbose``, ``return_trace``).
+        With ``return_trace=True``, metadata includes ``added_edge_ids`` in
+        insertion order, relative to the normalized graph's canonical edges.
 
     Examples
     --------
