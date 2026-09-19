@@ -117,7 +117,10 @@ def greedy(
     **kwargs:
         Objective knobs (``alpha``, ``beta_edge``, ``beta_node``,
         ``edge_norm_p``, ``node_norm_q``) and algorithm options
-        (``batch_size``, ``max_rounds``, ``verbose``, ``return_trace``).
+        (``batch_size``, ``max_rounds``, ``verbose``, ``return_trace``,
+        ``weighted_paths``). The default ``weighted_paths=None`` uses Dijkstra
+        when weights exist; ``False`` uses BFS/hop lengths instead. Dilation
+        always divides by the candidate edge weight.
         With ``return_trace=True``, metadata includes ``added_edge_ids`` in
         insertion order, relative to the normalized graph's canonical edges.
 
@@ -155,6 +158,8 @@ def heap(
     Extra options: ``top_k``, ``add_per_round``, ``clusters``,
     ``cluster_method``, ``local_radius``, ``dirty_limit``, ``score_form``,
     ``return_trace`` (record added edge ids and per-insertion-round sizes).
+    ``weighted_paths=None`` uses Dijkstra for weighted inputs; ``False`` uses
+    BFS/hop lengths. Dilation always divides by the candidate edge weight.
     """
     keep_ratio = _resolve_keep_ratio(keep_ratio, target_ratio)
     graph, params, kwargs = _prepare(G, kwargs)
@@ -192,6 +197,8 @@ def batch(
     frequent rescoring for speed. Explicit sizes override this policy; if
     only one is set, the other keeps its legacy default of 64 or 8.
     Keep ``add_per_round < sample_size`` so scoring affects the result.
+    ``weighted_paths=None`` uses Dijkstra for weighted inputs; ``False`` uses
+    BFS/hop lengths. Dilation always divides by the candidate edge weight.
     """
     keep_ratio = _resolve_keep_ratio(keep_ratio, target_ratio)
     graph, params, kwargs = _prepare(G, kwargs)
@@ -299,6 +306,7 @@ def sample(
         "mandatory_edges": int(sampler.mandatory.sum()),
         "backbone_edges": int(sampler.det_forest.sum()),
         "workers": int(sampler.workers),
+        "weighted_paths": bool(sampler.weighted_paths),
         "runtime": float(sampler.build_seconds),
         "default_keep_ratio": keep_ratio,
         "default_num_edges": num_edges,

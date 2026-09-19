@@ -39,6 +39,27 @@ python validation/compare_research.py \
   --seed 123
 ```
 
+## Weighted paths and feature weights
+
+```bash
+python validation/compare_weighted_research.py --output /tmp/weighted-parity.json
+```
+
+This offline comparison passed **32 checks** on a seeded 25-node, 40-edge
+weighted grid: research cosine/Euclidean/dot/uniform formulas, exact and bucketed
+MinSF/MaxSF masks, forest scores in both path modes, and dynamic candidate scores
+over six insertion rounds. Each round checks all candidates and a sampled batch;
+later supports contain cycles and exercise weighted Dijkstra. It uses two workers
+and downloads no datasets. The [recorded report](../validation/weighted_research_parity.json)
+includes hashes of the research source files used. This checks scoring and
+backbone equivalence, not full Heap/Batch/Sample trajectory equivalence or runtime.
+
+`tests/test_weighted.py` and `tests/test_weights.py` additionally cover exact
+budgets, connectivity, weighted exports and PyG node attributes, saved-artifact
+compatibility, sparse/dense features, optional metrics, and invalid inputs.
+The clean wheel/source installation checks run all five variants with weighted
+paths and built-in feature weights using only NumPy/SciPy (no Numba or sklearn).
+
 ## Backbone aliases
 
 `tests/test_backbone_aliases.py` checks the forest/tree synonyms listed in

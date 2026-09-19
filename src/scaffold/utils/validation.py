@@ -12,6 +12,18 @@ from typing import Optional
 import numpy as np
 
 
+def validate_edge_weights(weight, num_edges):
+    """Validate nonnegative lengths/priorities without modifying caller data."""
+    if weight is None:
+        return None
+    values = np.asarray(weight, dtype=np.float64)
+    if values.shape != (num_edges,):
+        raise ValueError("edge weights must have one value per canonical edge")
+    if not np.isfinite(values).all() or np.any(values < 0):
+        raise ValueError("edge weights must be finite and nonnegative")
+    return values
+
+
 def resolve_budget(
     num_edges: int,
     keep_ratio: Optional[float] = None,

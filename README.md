@@ -24,7 +24,8 @@ pip install "scaffold-sparse[speed] @ git+ssh://git@github.com/siddhartha047/Sca
 Python **3.9+**. The package is installed as `scaffold-sparse` and imported as
 `scaffold`. Core dependencies are NumPy and SciPy; `[speed]` adds Numba and is
 recommended for medium/large graphs. Add `networkx`, `pyg`, or `viz` to the
-extras as needed, for example `[speed,pyg]`. After the public PyPI release,
+extras as needed, for example `[speed,pyg]`; `[metrics]` adds scikit-learn
+distances. After the public PyPI release,
 use `pip install "scaffold-sparse[speed]"`.
 
 ## Quick start
@@ -178,6 +179,25 @@ passing the node count preserves isolated nodes. Results expose `.edge_index`
 (both directions), `.edge_weight`, `.to_torch()`, and `.mask` over normalized
 canonical edges. [Standalone examples](examples/02_standalone.py).
 
+### Weighted graphs and feature similarities
+
+Input edge weights are preserved. To derive weights from node features:
+
+```python
+weighted = scaffold.with_feature_weights(G, features=X, metric="cosine")
+result = scaffold.fast(
+    weighted, keep_ratio=0.6, backbone="fast-randsf", seed=0,
+    weighted_paths=True, workers=8,
+)
+```
+
+`cosine` uses `(1 + cosine) / 2`; `euclidean` uses `1 / (1 + distance)`.
+Use `kind="distance"` for raw distances. Common metrics work with NumPy/SciPy;
+`[metrics]` adds options such as Minkowski and Canberra. Set
+`weighted_paths=True` for weighted path lengths in **all five variants**;
+Fast/Sample retain hop-based defaults for compatibility. RandSF remains random;
+MaxSF/MinSF use weight ordering. [Weight semantics and examples](docs/weighted.md).
+
 ### PyTorch Geometric
 
 With the `pyg` extra installed, use your existing `data` object:
@@ -225,7 +245,7 @@ may contain cycles. Forest names and legacy tree names are interchangeable.
 | `randsf` (`randst`) | Random spanning forest | Shuffled Kruskal. |
 | `fast-maxsf` / `fast-minsf` | Fast maximum/minimum-weight spanning forest | Bucketed Kruskal; `fast-maxsf` is the API's fallback when no backbone is passed. |
 | `maxsf` / `minsf` | Maximum/minimum-weight spanning forest | Exact sorted Kruskal. |
-| `spf` (`spt`) | Shortest-path forest | Degree-rooted BFS; hop distance. |
+| `spf` (`spt`) | Shortest-path forest | Degree-rooted BFS/Dijkstra. |
 | `randspf` (`randspt`) | Random shortest-path forest | Random roots; BFS/Dijkstra. |
 | `slsf` (`slst`) | Scalable low-stretch forest | **Slow**; compares multiple rooted forests. |
 | `glsf` (`glst`) | Greedy low-stretch forest | **Slow**; small graphs only. |
@@ -288,7 +308,7 @@ python examples/06_variant_animations.py --out docs/images/variants
 
 [API reference](docs/api.md) · [Algorithms and scoring](docs/algorithms.md) ·
 [Runtime and memory](docs/performance.md) · [Backbones](docs/backbones.md) ·
-[PyG integration](docs/pytorch-geometric.md) · [Runnable examples](examples/) ·
+[Weighted graphs](docs/weighted.md) · [PyG integration](docs/pytorch-geometric.md) · [Runnable examples](examples/) ·
 [Validation](docs/validation.md) · [Contributing](CONTRIBUTING.md).
 
 **License:** [BSD 3-Clause](LICENSE). **Citation:** a BibTeX entry will be added

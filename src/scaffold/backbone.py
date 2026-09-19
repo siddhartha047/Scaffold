@@ -29,9 +29,8 @@ Available backbones
 ``randsf``      Kruskal on a uniform random edge permutation. Better-randomized
                 edge order than ``fast-randsf``, at the cost of materializing
                 that full permutation. Re-drawn per call.
-``spf``         Multi-source shortest-path (BFS) forest from the highest-degree
-                node of each component. Low diameter, useful when you care more
-                about hop distance than about edge weight.
+``spf``         Degree-rooted shortest-path forest: BFS without weights,
+                Dijkstra with nonnegative edge lengths.
 ``randspf``     Random-root BFS/Dijkstra forest with seeded randomized ties.
                 Requires the NetworkX extra.
 ``slsf``        Multi-root shortest-path forest heuristic, choosing the tree
@@ -65,6 +64,7 @@ from .kernels import (
     spanning_forest_mask,
     strided_spanning_forest_mask,
 )
+from .utils.validation import validate_edge_weights
 
 __all__ = [
     "DEFAULT_BACKBONE",
@@ -384,7 +384,10 @@ def _fast_random_forest(graph: Graph, max_edges, seed) -> np.ndarray:
 
 
 def _shortest_path_forest(graph: Graph, max_edges, seed) -> np.ndarray:
-    """BFS forest rooted at the highest-degree node of each component."""
+    """BFS/Dijkstra forest rooted at each component's highest-degree node."""
+    import heapq
+
+    weights = validate_edge_weights(graph.edge_weight, graph.num_edges)
     limit = _limit(graph, max_edges)
     n, m = graph.num_nodes, graph.num_edges
     mask = np.zeros(m, dtype=bool)
@@ -397,6 +400,30 @@ def _shortest_path_forest(graph: Graph, max_edges, seed) -> np.ndarray:
     roots = np.lexsort((np.arange(n), -degree))
     visited = np.zeros(n, dtype=bool)
     added = 0
+    if weights is not None:
+        distances = np.full(n, np.inf)
+        parent_edge = np.full(n, -1, dtype=np.int64)
+        for root in roots:
+            if visited[root] or added >= limit:
+                continue
+            distances[root] = 0.0
+            heap = [(0.0, int(root))]
+            while heap and added < limit:
+                distance, node = heapq.heappop(heap)
+                if visited[node]:
+                    continue
+                visited[node] = True
+                if parent_edge[node] >= 0:
+                    mask[parent_edge[node]] = True
+                    added += 1
+                for pos in range(rowptr[node], rowptr[node + 1]):
+                    neighbor = int(col[pos])
+                    candidate = distance + weights[eid[pos]]
+                    if not visited[neighbor] and candidate < distances[neighbor]:
+                        distances[neighbor] = candidate
+                        parent_edge[neighbor] = eid[pos]
+                        heapq.heappush(heap, (candidate, neighbor))
+        return mask
     queue = np.empty(n, dtype=np.int64)
 
     for root in roots:

@@ -60,6 +60,7 @@ def run(
     workers=None,
     verbose: bool = False,
     return_trace: bool = False,
+    weighted_paths: Optional[bool] = None,
 ):
     """Grow the support with a lazy max-heap over candidate scores.
 
@@ -120,6 +121,7 @@ def run(
         weight=graph.edge_weight,
         support_mask=ctx.mask.copy(),
         workers=workers,
+        weighted_paths=weighted_paths,
     )
 
     node_labels = assign_clusters(graph, clusters, method=cluster_method, seed=seed)
@@ -185,6 +187,7 @@ def run(
     initial = ctx.candidate_ids()
     if initial.size == 0:
         return ctx.finish("heap", rounds=0, rescored_candidates=0, heap_rebuilds=0,
+                          weighted_paths=scorer.weighted_paths,
                           **trace)
     evaluate(initial)
 
@@ -285,6 +288,7 @@ def run(
         add_per_round=add_per_round,
         clusters=int(cluster_ids.size),
         score_form=score_form,
+        weighted_paths=scorer.weighted_paths,
         workers=workers,
         **trace,
     )

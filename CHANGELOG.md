@@ -14,6 +14,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Weighted SPF now settles Dijkstra paths instead of using BFS. Near-unit
+  SciPy/dense adjacency weights are no longer silently treated as unweighted.
+- Sample artifacts record input edge weights and the path mode and reject
+  incompatible reuse. Legacy unweighted artifacts still load; weighted legacy
+  artifacts must be rebuilt. Feature-weighted PyG graphs retain node attributes
+  through the transform/resampler helpers.
+
 - Windows CI now reads repository text explicitly as UTF-8. The README image
   check exercises a cp1252 default on every platform; lint rejects implicit
   text encodings to prevent regressions.
@@ -25,6 +32,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Benchmark speed ratios now use the measured Fast reference for every row.
 
 ### Added
+
+- `feature_edge_weights` and `with_feature_weights`: research-compatible cosine,
+  Euclidean-affinity, dot, and uniform weights, raw-distance options, sparse
+  features, and optional scikit-learn distances via the `metrics` extra. Only
+  existing edge pairs are evaluated, with bounded temporary batches.
+- Explicit `weighted_paths` for Greedy/Heap/Batch (default auto-detect), consistent
+  with Fast/Sample's existing option (default remains `False`). Scoring validates
+  finite, nonnegative weights. Weighted usage guide, offline example, and direct
+  research comparisons for feature formulas, forest masks, and candidate scores.
 
 - Five method GIFs and a combined 2×3 animation on one shared RandSF backbone:
   real Greedy/Heap/Batch growth, grouped reveals of Fast's static selection,

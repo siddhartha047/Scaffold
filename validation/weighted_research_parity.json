@@ -1,0 +1,52 @@
+{
+  "seed": 137,
+  "nodes": 25,
+  "edges": 40,
+  "weight_range": [
+    0.1,
+    3.0
+  ],
+  "workers": 2,
+  "checks_passed": 32,
+  "checks": [
+    "feature weights: uniform",
+    "feature weights: cosine",
+    "feature weights: euclidean",
+    "feature weights: dot",
+    "forest: maxsf, limit=None",
+    "forest: maxsf, limit=12",
+    "forest: fast-maxsf, limit=None",
+    "forest: fast-maxsf, limit=12",
+    "forest: minsf, limit=None",
+    "forest: minsf, limit=12",
+    "forest: fast-minsf, limit=None",
+    "forest: fast-minsf, limit=12",
+    "tree scores: randsf, weighted_paths=False",
+    "tree scores: randsf, weighted_paths=True",
+    "tree scores: maxsf, weighted_paths=False",
+    "tree scores: maxsf, weighted_paths=True",
+    "tree scores: minsf, weighted_paths=False",
+    "tree scores: minsf, weighted_paths=True",
+    "tree scores: spf, weighted_paths=False",
+    "tree scores: spf, weighted_paths=True",
+    "dynamic scores: round=0, population=all",
+    "dynamic scores: round=0, population=batch",
+    "dynamic scores: round=1, population=all",
+    "dynamic scores: round=1, population=batch",
+    "dynamic scores: round=2, population=all",
+    "dynamic scores: round=2, population=batch",
+    "dynamic scores: round=3, population=all",
+    "dynamic scores: round=3, population=batch",
+    "dynamic scores: round=4, population=all",
+    "dynamic scores: round=4, population=batch",
+    "dynamic scores: round=5, population=all",
+    "dynamic scores: round=5, population=batch"
+  ],
+  "research_sha256": {
+    "sparsifiers/joint_dilation_congestion.py": "9164b0bf57cfb3ccaaf873e8584f8233600f7e0722e5e0d045448331bab3a9b6",
+    "sparsifiers/scaffold/scaffold_greedy.py": "b8e4eb5c39a1f07e548ada79a8e6d437f5993a3a56c7c56d3fca1309d2f4c3e3",
+    "sparsifiers/scaffold/spanning_tree.py": "7adf72826439b81ccec95c77f3629a72d3722399b40845e6774cacf6db5ce7c8",
+    "sparsifiers/scaffold/tree_score.py": "b9fb382e01a950298a69cb8c99e0ef3e61846dd7f3d20e8176bd7ca6a8b7113e"
+  },
+  "scope": "Feature formulas, weighted forest masks, tree scores, and dynamic candidate scores; not a runtime benchmark or full Heap/Batch/Sample trajectory equivalence."
+}

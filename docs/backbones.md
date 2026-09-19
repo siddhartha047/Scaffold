@@ -176,9 +176,9 @@ b = scaffold.fast(G, keep_ratio=0.2, backbone="fast-randsf", seed=2)
 
 ### `spf`
 
-Multi-source BFS forest rooted at the highest-degree node of each component.
-Low diameter, so dilations start out small. Useful when hop distance matters
-more than edge weight.
+BFS forest on unweighted inputs; Dijkstra forest on weighted inputs. Each
+component is rooted at its highest-degree node. Weights must be finite and
+nonnegative. Use `graph.with_weight(None)` to request hop distances explicitly.
 
 ### `randspf`
 
@@ -348,7 +348,7 @@ an ablation; almost never what you want in production.
 | Fast randomized support | `fast-randsf` |
 | More thoroughly shuffled support | `randsf` |
 | Per-epoch resparsification | `fast-randsf`, or `scaffold.sample(backbone="rotate-randsf")` |
-| Hop distance matters more than weight | `spf` |
+| Rooted shortest paths (hops or weighted distance) | `spf` |
 | Small graph, grow a tree using projected stretch | `glsf` |
 | Small graph, refine a tree by improving stretch | `llsf` |
 | Ablation with no structural guarantee | `none` |
@@ -458,20 +458,16 @@ If your graph has node features but no edge weights, deriving weights from
 feature similarity gives the backbone something meaningful to sort by:
 
 ```python
-import numpy as np
 import scaffold
 
-graph = scaffold.normalize_graph(data)          # PyG Data
-x = data.x.numpy()
-
-left, right = x[graph.src], x[graph.dst]
-cosine = (left * right).sum(1) / (
-    np.linalg.norm(left, axis=1) * np.linalg.norm(right, axis=1) + 1e-12
+weighted = scaffold.with_feature_weights(data, metric="cosine")  # uses PyG data.x
+result = scaffold.fast(
+    weighted, keep_ratio=0.6, backbone="fast-maxsf", weighted_paths=True,
 )
-weighted = graph.with_weight((cosine + 1) / 2)  # map to [0, 1]
-
-result = scaffold.fast(weighted, keep_ratio=0.2, backbone="fast-maxsf")
 ```
 
-With `fast-maxsf` the backbone then prefers edges joining similar nodes, which
-on a homophilous graph is usually the right structural prior.
+With `fast-maxsf`, the backbone prefers larger similarities. For smaller-is-closer
+distances, use `kind="distance"` and `minsf`/`fast-minsf`. Path scoring uses the
+supplied scalar directly; it does not invert similarities. The helper evaluates
+existing edges in batches. See [weighted graphs](weighted.md) for Euclidean,
+scikit-learn metrics, and the distinction between backbone and scoring weights.

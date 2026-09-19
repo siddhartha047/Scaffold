@@ -58,7 +58,7 @@ from ..kernels import (
     tree_lca,
 )
 from ..scoring import ScoreParams, tree_scores
-from ..utils.validation import connectivity_floor, resolve_budget
+from ..utils.validation import connectivity_floor, resolve_budget, validate_edge_weights
 from ..utils.workers import parallel_threads, resolve_workers, split_workers
 from ._sampling import systematic_positions
 
@@ -177,6 +177,7 @@ class ScaffoldSampler:
         """Run the one-time precompute and store the artifact on ``self``."""
         start = time.perf_counter()
         n, m = graph.num_nodes, graph.num_edges
+        validate_edge_weights(graph.edge_weight, m)
         src, dst = graph.src, graph.dst
         weight = graph.weights_or_ones()
 
@@ -453,6 +454,7 @@ class ScaffoldSampler:
             undirected_edge_weight=edge_weight,
             metadata={
                 "backbone": self.backbone,
+                "weighted_paths": bool(self.weighted_paths),
                 "support_budget_mode": "full_then_random_trim",
                 "rotation": int(rotation),
                 "draw_index": int(self._draw_index),
@@ -504,10 +506,13 @@ class ScaffoldSampler:
         forests = self.random_forests
         np.savez_compressed(
             path,
-            version=np.int64(1),
+            version=np.int64(2),
             num_nodes=np.int64(self.graph.num_nodes),
             src=self.graph.src,
             dst=self.graph.dst,
+            has_edge_weight=np.bool_(self.graph.is_weighted),
+            edge_weight=(self.graph.edge_weight if self.graph.is_weighted else np.zeros(0)),
+            weighted_paths=np.bool_(self.weighted_paths),
             pi=self.pi,
             mandatory=self.mandatory,
             det_forest=self.det_forest,
@@ -540,6 +545,17 @@ class ScaffoldSampler:
             )
         if "backbone" in data:
             kwargs.setdefault("backbone", str(data["backbone"].item()))
+        if "has_edge_weight" in data:
+            if bool(data["has_edge_weight"]) != graph.is_weighted or (
+                graph.is_weighted and not np.array_equal(data["edge_weight"], graph.edge_weight)
+            ):
+                raise ValueError("artifact edge weights do not match this graph; rebuild with scaffold.sample")
+            stored_mode = bool(data["weighted_paths"])
+            if "weighted_paths" in kwargs and bool(kwargs["weighted_paths"]) != stored_mode:
+                raise ValueError("artifact weighted_paths differs from the requested mode; rebuild it")
+            kwargs["weighted_paths"] = stored_mode
+        elif graph.is_weighted:
+            raise ValueError("legacy artifact has no saved edge weights; rebuild it for a weighted graph")
         sampler = cls(
             tree_count=int(data["tree_count"]),
             aggregate_lambda=float(data["aggregate_lambda"]),

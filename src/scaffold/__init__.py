@@ -31,6 +31,7 @@ from .datasets import grid_graph, grid_positions, random_geometric, ring_of_cliq
 from .graph import Graph, normalize_graph
 from .result import ScaffoldResult, ScaffoldScores
 from .scoring import ScoreParams, path_scores, tree_scores
+from .weights import feature_edge_weights, with_feature_weights
 
 __all__ = [
     # entry points
@@ -47,6 +48,8 @@ __all__ = [
     "ScaffoldScores",
     "ScoreParams",
     "normalize_graph",
+    "feature_edge_weights",
+    "with_feature_weights",
     # backbones
     "available_backbones",
     "register_backbone",
