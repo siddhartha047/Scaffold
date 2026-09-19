@@ -15,7 +15,7 @@ forest with `n − c` edges has, by construction, exactly the connected componen
 of `G`. Nothing else is guaranteed for free, and this one is cheap.
 
 Here `c` counts input components, including isolated vertices. “Tree” in the
-backbone names and tree-scoring descriptions means this forest in general:
+legacy API keys and tree-scoring descriptions means this forest in general:
 one tree per component, or a single tree on connected inputs. The forest is
 the initial backbone; adding further input edges can create cycles in the
 final support without joining separate input components.
@@ -248,7 +248,7 @@ the per-epoch cost to one uniform draw plus one `searchsorted`.
 
 ### Precomputation
 
-1. Build a fixed backbone `F₀` (MaxST by default, or seeded `randst`) and `R`
+1. Build a fixed backbone `F₀` (MaxSF by default, or seeded `randsf`) and `R`
    random spanning forests.
 2. Score every non-tree edge exactly against each forest with the tree kernel —
    `O(m log n + n)` per forest.
@@ -298,7 +298,7 @@ p = scores.inclusion_probabilities(keep_ratio=0.2)
 core = (p >= 1 - 1e-12).sum()      # edges in every draw
 ```
 
-With `backbone="rotate-randst"` the guaranteed forest rotates between draws,
+With `backbone="rotate-randsf"` the guaranteed forest rotates between draws,
 which shrinks the core and increases the variety of the views.
 
 **Use it for:** GNN training with per-epoch resparsification; any setting where

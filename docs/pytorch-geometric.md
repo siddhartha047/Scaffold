@@ -107,7 +107,7 @@ resampler = ScaffoldResampler(
     data,
     keep_ratio=0.6,
     seed=0,
-    backbone="rotate-randst",   # the guaranteed forest rotates too
+    backbone="rotate-randsf",   # the guaranteed forest rotates too
     tree_count=8,               # forests aggregated during precompute
     every=1,                    # redraw every N epochs
 )
@@ -141,7 +141,7 @@ resampler.coverage(epochs=(1, 10, 100, 500))
 `always_included` is the *deterministic core* — edges present in every draw.
 It can never be smaller than the backbone. If the core is most of your budget,
 resampling has little room to vary and you may as well use `scaffold.fast`.
-`backbone="rotate-randst"` shrinks the core.
+`backbone="rotate-randsf"` shrinks the core.
 
 ```python
 resampler.delta_min      # the connectivity floor for this graph

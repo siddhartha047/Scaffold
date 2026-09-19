@@ -6,7 +6,7 @@ Run::
 
 Why a grid? Its regular layout makes retained paths and omitted edges easy
 to compare, without the visual clutter of a large irregular graph.
-The method, budget, and sampling demos share a seeded RandST backbone;
+The method, budget, and sampling demos share a seeded RandSF backbone;
 the backbone comparison shows each named construction separately.
 
 Produces five grid figures, backbone and resampling GIFs, and measurements in
@@ -29,37 +29,51 @@ import numpy as np
 
 import scaffold
 from scaffold import viz
-from scaffold.backbone import DEFAULT_LLST_MAX_INPUT_EDGES, build_backbone
+from scaffold.backbone import (
+    DEFAULT_LLST_MAX_INPUT_EDGES,
+    build_backbone,
+    canonical_backbone_name,
+)
 from scaffold.scoring import tree_scores
 
 ROWS = COLS = 12
 KEEP_RATIO = 0.72  # a 12x12 grid needs 143/264 = 0.542 just to stay connected
 SEED = 0
-DEMO_BACKBONE = "randst"
-SAMPLE_DEMO_BACKBONE = "fixed-randst"
+DEMO_BACKBONE = "RandSF"
+SAMPLE_DEMO_BACKBONE = "fixed-RandSF"
+BACKBONE_LABELS = {
+    "fast-maxst": "Fast-MaxSF",
+    "maxst": "MaxSF",
+    "fast-randst": "Fast-RandSF",
+    "randst": "RandSF",
+    "spt": "SPF",
+    "glst": "GLSF",
+    "llst": "LLSF",
+}
 BACKBONE_NAMES = {
-    "fast-maxst": "Fast maximum-weight\nspanning tree",
-    "maxst": "Maximum-weight\nspanning tree",
-    "fast-randst": "Fast randomized\nspanning tree",
-    "randst": "Random spanning tree",
-    "spt": "Shortest-path tree",
-    "glst": "Greedy low-stretch tree",
-    "llst": "Local-search\nlow-stretch tree",
+    "fast-maxst": "Fast maximum-weight\nspanning forest",
+    "maxst": "Maximum-weight\nspanning forest",
+    "fast-randst": "Fast randomized\nspanning forest",
+    "randst": "Random spanning forest",
+    "spt": "Shortest-path forest",
+    "glst": "Greedy low-stretch forest",
+    "llst": "Local-search\nlow-stretch forest",
 }
 
 
 def figure_backbones(graph, positions, out_dir, quick=False):
     """Every SCAFFOLD run starts from a spanning forest. They differ a lot."""
     names = ["fast-maxst", "maxst", "fast-randst", "randst", "spt", "glst", "llst"]
-    llst_options = {"init_support": "glst", "max_passes": 10}
+    llst_options = {"init_support": "GLSF", "max_passes": 10}
     if quick:
         llst_options.update(max_passes=2, candidate_sample_size=16, cycle_sample_size=4)
     measurements = {}
     masks = {}
     for name in names:
         options = llst_options if name == "llst" else {}
-        print(f"  building {name}...", flush=True)
-        mask = build_backbone(graph, name, seed=SEED, **options)
+        # Use forest notation at the API boundary, retaining historical JSON keys.
+        print(f"  building {BACKBONE_LABELS[name]}...", flush=True)
+        mask = build_backbone(graph, BACKBONE_LABELS[name], seed=SEED, **options)
         stats = tree_scores(graph.num_nodes, graph.src, graph.dst, mask)
         stretch = float(stats["total_stretch"])
         measurements[name] = {
@@ -144,7 +158,9 @@ def _draw_backbones(graph, positions, out_dir, masks, measurements):
     )
     for ax, (name, mask) in zip(axes[1:], masks.items()):
         stats = measurements[name]
-        label = "fast-maxst · default" if name == "fast-maxst" else name
+        label = BACKBONE_LABELS[name]
+        if name == "fast-maxst":
+            label += " · default"
         _backbone_panel(
             graph,
             positions,
@@ -172,7 +188,7 @@ def _draw_backbones(graph, positions, out_dir, masks, measurements):
     fig.text(
         0.5,
         0.925,
-        "Same graph. Same forest size. Different supporting paths.",
+        "Unweighted graph. Same forest size. Different supporting paths.",
         ha="center",
         fontsize=13,
         color="#4b5563",
@@ -180,7 +196,7 @@ def _draw_backbones(graph, positions, out_dir, masks, measurements):
     fig.text(
         0.5,
         0.047,
-        f"LLST refines GLST: {reduction:.1%} less omitted-edge stretch "
+        f"LLSF refines GLSF: {reduction:.1%} less omitted-edge stretch "
         "with the same edge count.",
         ha="center",
         fontsize=12,
@@ -191,7 +207,7 @@ def _draw_backbones(graph, positions, out_dir, masks, measurements):
         0.5,
         0.015,
         "Blue: retained. Gray dashes: omitted. Stretch: total omitted-edge detour length. "
-        f"LLST: {_llst_search_label(measurements)}; seed {SEED}.",
+        f"LLSF: {_llst_search_label(measurements)}; seed {SEED}.",
         ha="center",
         fontsize=10,
         color="#4b5563",
@@ -211,12 +227,12 @@ def _animate_backbones(graph, positions, out_dir, masks, measurements):
 
     explanations = {
         "fast-maxst": "Default: bucketed weight ordering, followed by a union-find scan.",
-        "maxst": "Exact maximum-weight forest; tied weights give the same tree here.",
+        "maxst": "Exact maximum-weight forest; tied weights give the same forest here.",
         "fast-randst": "A seeded coprime-stride edge scan builds a randomized forest.",
         "randst": "A full random edge permutation gives a different randomized forest.",
         "spt": "A breadth-first forest keeps short paths from its starting roots.",
-        "glst": "GLST grows a forest using projected stretch and cut size.",
-        "llst": "LLST refines GLST through improving cycle swaps; the forest size stays fixed.",
+        "glst": "GLSF grows a forest using projected stretch and cut size.",
+        "llst": "LLSF refines GLSF through improving cycle swaps; the forest size stays fixed.",
     }
     frames = []
     for index, (name, mask) in enumerate(masks.items(), start=1):
@@ -226,14 +242,14 @@ def _animate_backbones(graph, positions, out_dir, masks, measurements):
             graph,
             positions,
             axes[0],
-            "Input grid",
+            "Unweighted input",
             f"{graph.num_nodes} nodes · {graph.num_edges} edges",
         )
         _backbone_panel(
             graph,
             positions,
             axes[1],
-            name,
+            BACKBONE_LABELS[name],
             f"{stats['forest_edges']} edges · {_count_label(stats['components'], 'component')} · "
             f"stretch {stats['omitted_edge_stretch']:,.0f}",
             mask=mask,
@@ -255,7 +271,7 @@ def _animate_backbones(graph, positions, out_dir, masks, measurements):
             initial = measurements["glst"]["omitted_edge_stretch"]
             final = stats["omitted_edge_stretch"]
             note = (
-                f"GLST → LLST: {initial:,.0f} → {final:,.0f} stretch "
+                f"GLSF → LLSF: {initial:,.0f} → {final:,.0f} stretch "
                 f"({1 - final / max(1.0, initial):.1%} reduction); "
                 f"{_llst_search_label(measurements)}."
             )
@@ -328,7 +344,7 @@ def figure_methods(graph, positions, out_dir):
     _grid_heading(
         fig,
         "Five algorithms, one edge budget",
-        f"Target retention {KEEP_RATIO:.0%} · shared {DEMO_BACKBONE} backbone · seed {SEED}",
+        f"Target retention {KEEP_RATIO:.0%} · shared {BACKBONE_LABELS[canonical_backbone_name(DEMO_BACKBONE)]} backbone · seed {SEED}",
         "Pale red: shared backbone. Bold blue: added edges. Gray dashes: omitted edges.",
     )
     path = _save(fig, out_dir, "grid_methods.png")
@@ -362,7 +378,7 @@ def figure_ratios(graph, positions, out_dir):
     fig.text(.035, .955, "Scaffold", fontsize=29, fontweight="bold", color="#1f5fbf")
     fig.text(.035, .915, "Reduce the edge budget. Keep every node.",
              fontsize=14, color="#4b5563")
-    fig.text(.965, .954, f"{graph.num_nodes} nodes · Scaffold-Fast · RandST backbone",
+    fig.text(.965, .954, f"{graph.num_nodes} nodes · Scaffold-Fast · RandSF backbone",
              ha="right", fontsize=11, color="#4b5563")
     fig.legend(
         handles=[
@@ -454,7 +470,7 @@ def figure_scores(graph, positions, out_dir):
     _grid_heading(
         fig,
         "Score once, sample repeatedly",
-        "Scaffold-Sample · fixed RandST backbone · exact-budget draws",
+        "Scaffold-Sample · fixed RandSF backbone · exact-budget draws",
         "Weights and probabilities use separate color scales. Blue edges form one draw.",
     )
     print(
@@ -500,7 +516,7 @@ def figure_coverage(graph, positions, out_dir):
     _grid_heading(
         fig,
         "Small views, growing coverage",
-        f"Scaffold-Sample · RandST backbone · target {KEEP_RATIO:.0%} per epoch · seed {SEED}",
+        f"Scaffold-Sample · RandSF backbone · target {KEEP_RATIO:.0%} per epoch · seed {SEED}",
         "Panels show accumulated coverage. Each individual draw still has the same edge budget.",
     )
     path = _save(fig, out_dir, "grid_coverage.png")
@@ -599,7 +615,7 @@ def _animate_coverage(graph, positions, out_dir, draws, unions, curve, component
         _grid_heading(
             fig,
             "A fresh sparse view each epoch",
-            f"Scaffold-Sample · RandST backbone · target retention {KEEP_RATIO:.0%} · seed {SEED}",
+            f"Scaffold-Sample · RandSF backbone · target retention {KEEP_RATIO:.0%} · seed {SEED}",
             "Top right: one sparse draw. Bottom left: its union with all preceding draws.",
         )
         frames.append(_gif_frame(fig))
@@ -625,7 +641,7 @@ def main():
     parser.add_argument("--cols", type=int, default=None)
     parser.add_argument(
         "--quick", action="store_true",
-        help="Use a 6x6 grid unless dimensions are given, and two sampled LLST swaps.",
+        help="Use a 6x6 grid unless dimensions are given, and two sampled LLSF swaps.",
     )
     parser.add_argument(
         "--only",
@@ -639,10 +655,10 @@ def main():
     graph = scaffold.grid_graph(args.rows, args.cols)
     if args.only in (None, "backbones") and graph.num_edges > DEFAULT_LLST_MAX_INPUT_EDGES:
         parser.error(
-            f"The LLST backbone demo is limited to {DEFAULT_LLST_MAX_INPUT_EDGES:,} "
+            f"The LLSF backbone demo is limited to {DEFAULT_LLST_MAX_INPUT_EDGES:,} "
             f"undirected input edges; this grid has {graph.num_edges:,}. "
             "Exhaustive local search can take many minutes or longer. Use a "
-            "smaller grid, or select a RandST demo with --only methods, "
+            "smaller grid, or select a RandSF demo with --only methods, "
             "--only ratios, --only scores, or --only coverage."
         )
 

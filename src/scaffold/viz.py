@@ -220,8 +220,8 @@ def compare_methods(
             }
             if backbone_name not in sample_backbones:
                 raise ValueError(
-                    "the method comparison can share only a fast-maxst "
-                    "or randst backbone with scaffold.sample"
+                    "the method comparison can share only a fast-maxsf "
+                    "or randsf backbone with scaffold.sample"
                 )
             result = sparsify(
                 graph,

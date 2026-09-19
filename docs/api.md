@@ -23,6 +23,8 @@ strings work unchanged.
 ### `scaffold.fast(G, ...)`
 
 Return a [`ScaffoldResult`](#scaffoldresult).
+The default is Fast-MaxSF; `fast-maxsf` and its historical key `fast-maxst`
+select the same backbone. All examples below prefer forest spellings.
 
 ### `scaffold.sample(G, keep_ratio=None, num_edges=None, seed=None, **kwargs)`
 
@@ -47,18 +49,24 @@ budget for later `draw()` calls.
 them, and do not combine either one with `num_edges`; contradictory budgets
 raise `ValueError`.
 
-Built-ins are `fast-maxst` (default), `fast-mst`, `fast-randst`, `maxst`,
-`mst`, `randst`, `spt`, `glst`, `llst`, and `none`. `fast_randst` is accepted as the
-research-configuration spelling of `fast-randst`. `llst` is the local-search
+Built-ins use the names `fast-maxsf` (default), `fast-minsf`, `fast-randsf`,
+`maxsf`, `minsf`, `randsf`, `spf`, `randspf`, `slsf`, `glsf`, `llsf`, and `none`.
+`SF` means `MaxSF`; names are case-insensitive. Historical keys such as
+`maxst`, `mst`, `randst`, and `llst` remain supported. `llsf` is the local-search
 low-stretch forest for small graphs and requires the NetworkX extra; pass its
-search settings through `backbone_options` (see [LLST options](backbones.md#llst)).
-LLST raises `ValueError` above 1,000 normalized undirected input edges to
-avoid unexpectedly long runs. Use `randst`, `fast-randst`, or `fast-maxst`
-for larger inputs, or explicitly raise LLST's positive-integer
+search settings through `backbone_options` (see [LLSF options](backbones.md#llst)).
+LLSF raises `ValueError` above 1,000 normalized undirected input edges to
+avoid unexpectedly long runs. Use `randsf`, `fast-randsf`, or `fast-maxsf`
+for larger inputs, or explicitly raise LLSF's positive-integer
 `backbone_options["max_input_edges"]` limit.
 
-**Trees and forests.** The conventional “tree” names denote **spanning
-forests**: all built-in constructions except `none` build one tree per input
+**Forest names and API keys.** Forest spellings (`randsf`, `maxsf`, `minsf`,
+`spf`, `glsf`, `llsf`, `slsf`, `randspf`, and the `fast-*` forms) are accepted
+alongside historical tree spellings. Names are case-insensitive, with hyphens
+and underscores interchangeable. Metadata and saved artifacts retain the
+historical keys; see the [complete alias tables](backbones.md#forest-aliases).
+SLSF and RandSPF also require NetworkX. All built-in constructions except
+`none` build one tree per input
 component, preserving isolated vertices. The full forest has `n − c` edges
 for `n` nodes and `c` components; it is a single spanning tree when `c=1`.
 This describes the initial backbone, not the final support, which may contain
@@ -138,7 +146,7 @@ Fast implementation, now separated from the one-pass LCA method.
 |---|---|---|
 | `tree_count` | `8` | random spanning forests to aggregate over (`R`) |
 | `aggregate_lambda` | `1.0` | mix of score vs. backbone frequency; `0` = frequency only |
-| `backbone` | `"fixed-maxst"` | `"fixed-maxst"`, `"fixed-randst"`, or `"rotate-randst"` |
+| `backbone` | `"fixed-maxsf"` (historical key `"fixed-maxst"`) | `"fixed-maxsf"`, `"fixed-randsf"`, `"fixed-slsf"`, or `"rotate-randsf"`; [historical spellings](backbones.md#forest-aliases) also accepted |
 | `scheme` | `"systematic"` | sampling scheme (only systematic π-ps is implemented) |
 | `weighted_paths` | `False` | as above |
 | `verbose` | `False` | per-forest progress |
@@ -219,7 +227,7 @@ nothing has been sparsified.
 | `.scores` / `.pi` | `(m,)` SCAFFOLD weight per undirected edge |
 | `.edge_weight` | the same, symmetrized to `(2m,)` |
 | `.mandatory` | `(m,)` bool: cross-component edges |
-| `.backbone` | `(m,)` bool: the deterministic MaxST forest |
+| `.backbone` | `(m,)` bool: the fixed reference forest (MaxSF by default) |
 | `.order` | tree-locality permutation of the edges |
 | `.sampler` | the underlying `ScaffoldSampler` |
 | `.inclusion_probabilities(keep_ratio=None, num_edges=None)` | `(m,)`, sums to the budget, all `≤ 1` |
@@ -295,8 +303,9 @@ only option once cycles exist.
 ```python
 from scaffold.backbone import build_backbone, register_backbone, available_backbones
 
-available_backbones()
-mask = build_backbone(graph, "fast-maxst", max_edges=None, seed=0)
+available_backbones(notation="forest")  # preferred SF notation
+available_backbones()                   # historical keys, for compatibility
+mask = build_backbone(graph, "MaxSF", max_edges=None, seed=0)
 register_backbone("mine", my_builder)
 ```
 

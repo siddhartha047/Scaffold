@@ -2,8 +2,10 @@
 
 SCAFFOLD starts from a spanning forest of ``G`` and *adds* edges. This
 support backbone has one tree per input connected component, including
-isolated vertices as one-node trees. "Spanning tree" in conventional method
-names is shorthand for this forest; a connected input gives a single tree.
+isolated vertices as one-node trees. Display names use forest terminology
+(RandSF, MaxSF, MinSF, SPF, GLSF, LLSF). Forest spellings such as ``randsf``
+and ``maxsf`` are accepted; historical ``randst`` / ``maxst`` keys remain
+canonical in metadata. A connected input gives a single tree.
 As long as the edge budget is at least ``n - c`` the
 output has exactly the connected components of the input. Everything above that
 floor is spent on the edges that most reduce dilation and congestion.
@@ -12,33 +14,38 @@ The final sparse support may contain cycles; the initial backbone is acyclic.
 Available backbones
 -------------------
 
-============== =============================================================
-``fast-maxst``  **Default.** Bucketed approximate maximum spanning forest.
+================ =============================================================
+``fast-maxsf``  **Default.** Bucketed approximate maximum spanning forest.
                 Quantizes weights into ``buckets`` priority classes and runs
                 one linear-time counting sort instead of an ``O(m log m)``
                 comparison sort. On an unweighted graph it degenerates to the
                 fastest deterministic forest scan available.
-``fast-mst``    Same, minimizing.
-``fast-randst`` Seeded coprime-stride randomized Kruskal. Visits every edge
+``fast-minsf``  Same, minimizing.
+``fast-randsf`` Seeded coprime-stride randomized Kruskal. Visits every edge
                 exactly once without allocating a random permutation. Faster
-                and lower-memory than ``randst``, with less random mixing.
-``maxst``       Exact maximum spanning forest (stable Kruskal, ``O(m log m)``).
-``mst``         Exact minimum spanning forest.
-``randst``      Kruskal on a uniform random edge permutation. Better-randomized
-                edge order than ``fast-randst``, at the cost of materializing
+                and lower-memory than ``randsf``, with less random mixing.
+``maxsf``       Exact maximum spanning forest (stable Kruskal, ``O(m log m)``).
+``minsf``       Exact minimum spanning forest.
+``randsf``      Kruskal on a uniform random edge permutation. Better-randomized
+                edge order than ``fast-randsf``, at the cost of materializing
                 that full permutation. Re-drawn per call.
-``spt``         Multi-source shortest-path (BFS) forest from the highest-degree
+``spf``         Multi-source shortest-path (BFS) forest from the highest-degree
                 node of each component. Low diameter, useful when you care more
                 about hop distance than about edge weight.
-``glst``        Greedy low-stretch forest. ``O(n * m * |cut|)``:
+``randspf``     Random-root BFS/Dijkstra forest with seeded randomized ties.
+                Requires the NetworkX extra.
+``slsf``        Multi-root shortest-path forest heuristic, choosing the tree
+                with the lowest estimated mean stretch per component. Requires
+                the NetworkX extra; not a theoretical low-stretch construction.
+``glsf``        Greedy low-stretch forest. ``O(n * m * |cut|)``:
                 small graphs only.
-``llst``        Local-search low-stretch forest. Improves each component's tree
+``llsf``        Local-search low-stretch forest. Improves each component's tree
                 with edge swaps; exact by default, with optional sampling. Small
                 graphs only; limited to 1,000 input edges by default. Requires
                 the NetworkX extra.
 ``none``        Start from the empty graph. Connectivity is then *not*
                 guaranteed -- only use this if you want the pure score ranking.
-============== =============================================================
+================ =============================================================
 
 Custom backbones can be registered with :func:`register_backbone` or passed
 directly as a boolean mask / edge-id array.
@@ -65,6 +72,7 @@ __all__ = [
     "available_backbones",
     "build_backbone",
     "canonical_backbone_name",
+    "canonical_sample_backbone",
     "register_backbone",
 ]
 
@@ -73,7 +81,44 @@ DEFAULT_BUCKETS = 256
 MAX_BUCKETS = 65_536
 DEFAULT_LLST_MAX_INPUT_EDGES = 1_000
 
+# Keep these maps in sync with the research configs/BACKBONE_ALIASES.md.
+# Historical tree spellings remain canonical for metadata and saved artifacts.
+SUPPORT_NAME_ALIASES = {
+    "minst": "mst",
+    "fast_minst": "fast_mst",
+    "maxsf": "maxst",
+    "msf": "mst",
+    "minsf": "mst",
+    "fast_maxsf": "fast_maxst",
+    "fast_msf": "fast_mst",
+    "fast_minsf": "fast_mst",
+    "randsf": "randst",
+    "fast_randsf": "fast_randst",
+    "slsf": "slst",
+    "glsf": "glst",
+    "llsf": "llst",
+    "randspf": "randspt",
+    "sf": "maxst",
+    "st": "maxst",
+}
+
+SAMPLE_BACKBONE_ALIASES = {
+    "fixed-maxsf": "fixed-maxst",
+    "fixed-msf": "fixed-maxst",
+    "fixed-slsf": "fixed-slst",
+    "rotate-randsf": "rotate-randst",
+    "fixed-sf": "fixed-maxst",
+    "fixed-st": "fixed-maxst",
+}
+
 _ALIASES = {
+    "fastmaxsf": "fast-maxst",
+    "fastminsf": "fast-mst",
+    "fastmsf": "fast-mst",
+    "fastrandsf": "fast-randst",
+    "max_sf": "maxst",
+    "min_sf": "mst",
+    "rand_sf": "randst",
     "fast_maxst": "fast-maxst",
     "fastmaxst": "fast-maxst",
     "fast_mst": "fast-mst",
@@ -88,8 +133,10 @@ _ALIASES = {
     "random": "randst",
     "bfs": "spt",
     "shortest_path": "spt",
+    "spf": "spt",
     "low_stretch": "glst",
     "local_search_low_stretch_tree": "llst",
+    "local_search_low_stretch_forest": "llst",
     "local_search_low_stretch": "llst",
     "empty": "none",
     "": "none",
@@ -97,20 +144,60 @@ _ALIASES = {
 
 _REGISTRY: Dict[str, Callable] = {}
 
+# Preferred public notation; registry/artifact keys remain historical.
+_FOREST_NAMES = {
+    "fast-maxst": "fast-maxsf",
+    "fast-mst": "fast-minsf",
+    "fast-randst": "fast-randsf",
+    "maxst": "maxsf",
+    "mst": "minsf",
+    "randst": "randsf",
+    "spt": "spf",
+    "randspt": "randspf",
+    "slst": "slsf",
+    "glst": "glsf",
+    "llst": "llsf",
+}
+
 
 def canonical_backbone_name(name) -> str:
-    """Normalize user-facing spellings (``fast_maxst``, ``FAST-MAXST``, ...)."""
+    """Fold tree/forest spellings onto the package's historical registry keys.
+
+    Unlike the research support keys, this package has always used hyphens
+    for ``fast-maxst`` / ``fast-mst`` / ``fast-randst``. Preserve those keys,
+    as well as custom registered names, when accepting forest aliases.
+    """
     if not isinstance(name, str):
         return name
     normalized = name.strip().lower().replace(" ", "")
+    normalized = SUPPORT_NAME_ALIASES.get(normalized.replace("-", "_"), normalized)
     normalized = _ALIASES.get(normalized, normalized)
     normalized = _ALIASES.get(normalized.replace("-", "_"), normalized)
     return normalized
 
 
-def available_backbones():
-    """Sorted list of registered backbone names."""
-    return sorted(_REGISTRY)
+def canonical_sample_backbone(name):
+    """Normalize Sample aliases before comparisons, draw-plan keys or saving."""
+    if not isinstance(name, str):
+        return name
+    normalized = name.strip().lower().replace("_", "-")
+    # Package extension: Sample also supports a fixed randomized forest.
+    if normalized == "fixed-randsf":
+        return "fixed-randst"
+    return SAMPLE_BACKBONE_ALIASES.get(normalized, normalized)
+
+
+def available_backbones(*, notation="canonical"):
+    """List backbones using ``notation='forest'`` for the preferred SF names.
+
+    The default retains historical registry keys for existing callers.
+    Both spellings select identical builders. Custom names are unchanged.
+    """
+    if notation == "canonical":
+        return sorted(_REGISTRY)
+    if notation == "forest":
+        return sorted(_FOREST_NAMES.get(name, name) for name in _REGISTRY)
+    raise ValueError("notation must be 'forest' or 'canonical'")
 
 
 def register_backbone(name: str, builder: Callable):
@@ -134,7 +221,7 @@ def build_backbone(
 ) -> np.ndarray:
     """Return a boolean mask over ``graph.edge_index`` selecting the backbone.
 
-    Despite their conventional "tree" names, built-in constructions other
+    Despite the historical "tree" spellings in API keys, built-in constructions other
     than ``none`` return a spanning forest: one tree per input component,
     with ``n - c`` edges when the budget permits. Isolated vertices remain
     in ``graph`` even though they contribute no selected edges. Connected
@@ -146,7 +233,7 @@ def build_backbone(
     acyclic edges have been accepted, so a partial forest is built directly
     rather than built in full and truncated.
 
-    LLST additionally limits the full input to 1,000 undirected edges by
+    LLSF (``llsf``; legacy ``llst``) additionally limits the full input to 1,000 undirected edges by
     default. Its positive-integer ``max_input_edges`` option changes this
     runtime guard independently of the output's ``max_edges`` budget.
     """
@@ -169,7 +256,9 @@ def build_backbone(
     name = canonical_backbone_name(backbone)
     if name not in _REGISTRY:
         raise ValueError(
-            f"Unknown backbone {backbone!r}. Available: {available_backbones()}"
+            f"Unknown backbone {backbone!r}. Available: "
+            f"{available_backbones(notation='forest')}. "
+            "Historical tree spellings (maxst, llst, etc.) are also accepted."
         )
     return _validated(_REGISTRY[name](graph, max_edges=max_edges, seed=seed, **options), m)
 
@@ -216,7 +305,7 @@ def _fast_weighted_forest(
     """Bucketed approximate Kruskal: linear-time ordering, same union-find scan.
 
     Edge weights are quantized into ``buckets`` priority classes, and edges
-    inside a class keep input order. The result is not the exact MaxST, but on
+    inside a class keep input order. The result is not the exact MaxSF, but on
     the graphs SCAFFOLD targets the difference is immaterial while the ordering
     cost drops from ``O(m log m)`` to ``O(m + buckets)``.
     """
@@ -335,7 +424,7 @@ def _shortest_path_forest(graph: Graph, max_edges, seed) -> np.ndarray:
 
 
 def _greedy_low_stretch_forest(graph: Graph, max_edges, seed, eta=1.0, alpha=1.0):
-    """Greedy low-stretch tree (GLST).
+    """Greedy low-stretch forest (GLSF; API key ``glst``).
 
     Repeatedly adds the boundary edge maximizing
     ``(cut / cut_max) ** eta / ((projStretch / stretch_max) ** alpha)``, where
@@ -355,8 +444,8 @@ def _greedy_low_stretch_forest(graph: Graph, max_edges, seed, eta=1.0, alpha=1.0
     guard = int(getattr(graph, "_glst_guard", 5000))
     if m > guard:
         raise ValueError(
-            f"backbone='glst' is O(n * m * |cut|) and this graph has {m:,} edges. "
-            "Use 'fast-maxst' (the default) for anything beyond a few thousand "
+            f"backbone='glsf' (legacy 'glst') is O(n * m * |cut|) and this graph has {m:,} edges. "
+            "Use 'fast-maxsf' (the default) for anything beyond a few thousand "
             "edges, or pass a precomputed backbone mask."
         )
 
@@ -438,14 +527,15 @@ def _local_search_low_stretch_forest(
         or not isinstance(max_input_edges, (int, np.integer))
         or max_input_edges < 1
     ):
-        raise ValueError("LLST max_input_edges must be a positive integer")
+        raise ValueError("LLSF (legacy LLST) max_input_edges must be a positive integer")
     if graph.num_edges > max_input_edges:
         raise ValueError(
-            f"backbone='llst' is intended for small graphs: this graph has "
+            f"backbone='llsf' (legacy backbone='llst') is intended for small graphs: this graph has "
             f"{graph.num_edges:,} undirected input edges, above the "
             f"max_input_edges={max_input_edges:,} runtime limit. Exhaustive "
-            "local search can take many minutes or longer. Use backbone='randst', "
-            "'fast-randst', or 'fast-maxst' instead. To deliberately raise the "
+            "local search can take many minutes or longer. Use backbone='randsf', "
+            "'fast-randsf', or 'fast-maxsf' instead (legacy names: 'randst', "
+            "'fast-randst', 'fast-maxst'). To deliberately raise the "
             "limit, pass backbone_options={'max_input_edges': ...} to Scaffold "
             "methods, or max_input_edges=... to build_backbone."
         )
@@ -455,6 +545,20 @@ def _local_search_low_stretch_forest(
     return local_search_low_stretch_forest(graph, max_edges=max_edges, seed=seed, **options)
 
 
+def _scalable_low_stretch_forest(graph, max_edges=None, seed=None, **options):
+    from ._slst import scalable_low_stretch_forest
+
+    return scalable_low_stretch_forest(graph, max_edges=max_edges, seed=seed, **options)
+
+
+def _random_shortest_path_forest(graph, max_edges=None, seed=None, **options):
+    from ._slst import random_shortest_path_forest
+
+    return random_shortest_path_forest(graph, max_edges=max_edges, seed=seed, **options)
+
+
+register_backbone("slst", _scalable_low_stretch_forest)
+register_backbone("randspt", _random_shortest_path_forest)
 register_backbone("llst", _local_search_low_stretch_forest)
 register_backbone(
     "fast-maxst",

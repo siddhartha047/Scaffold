@@ -39,9 +39,29 @@ python validation/compare_research.py \
   --seed 123
 ```
 
-## LLST backbone
+## Backbone aliases
 
-The LLST comparison uses small synthetic graphs and does not download datasets:
+`tests/test_backbone_aliases.py` checks the forest/tree synonyms listed in
+[the backbone guide](backbones.md#forest-aliases). The tests cover seeded
+forest masks, weighted min/max distinctions, all four growth variants,
+canonical metadata, Sample scores and draw-plan keys, artifact save/reload,
+LLSF initializer aliases, custom backbones, and disconnected/partial forests.
+
+The two alias maps were compared directly with the research
+`configs/BACKBONE_ALIASES.md` implementation. The SLSF component builder also
+matched the research implementation in 72 comparisons: weighted/unweighted
+and connected/disconnected graphs, three seeds, full/partial budgets, and
+default, sampled-evaluation, and fast-mode settings. Inputs used the same
+canonical node/edge order to preserve tie breaking.
+
+`validation/check_distributions.py` exercises forest aliases through all five
+methods after installing built artifacts outside the checkout, with only core
+dependencies. The NetworkX wheel installation was additionally checked with
+`slsf`, `randspf`, and Sample's `fixed-slsf` mode.
+
+## LLSF backbone
+
+The LLSF comparison uses small synthetic graphs and does not download datasets:
 
 ```bash
 python validation/compare_llst_research.py
@@ -51,13 +71,13 @@ It checks 84 forest masks against the original
 `LocalSearchLowStretchTreeSparsifier`: seven research initializers, four
 exact/sampled configurations, and unweighted, weighted and disconnected
 fixtures. `--research-root` overrides the sibling checkout path. The research
-side requires its PyG dependencies; packaged LLST itself only adds NetworkX
+side requires its PyG dependencies; packaged LLSF itself only adds NetworkX
 to the NumPy/SciPy core. Inputs are placed in the same canonical order before
 comparison, so node/edge insertion order does not alter tie breaking.
 
 `tests/test_llst.py` independently verifies best improving swaps and local
 optimality using NetworkX distances, as well as forest validity, budgets,
 seeded sampling, original labels/weights, and optional-framework isolation.
-It also covers LLST's 1,000-edge runtime guard, normalized edge counting,
+It also covers LLSF's 1,000-edge runtime guard, normalized edge counting,
 explicit overrides through each supported Scaffold method, and early rejection
 of oversized backbone demos.

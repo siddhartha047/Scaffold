@@ -19,7 +19,7 @@ try:
     import networkx as nx
 except ImportError as exc:  # pragma: no cover - exercised without the extra
     raise ImportError(
-        "The LLST backbone requires NetworkX; install scaffold-sparse[networkx]."
+        "The LLSF (legacy LLST) backbone requires NetworkX; install scaffold-sparse[networkx]."
     ) from exc
 
 from .backbone import DEFAULT_BUCKETS, build_backbone, canonical_backbone_name
@@ -57,7 +57,7 @@ def local_search_low_stretch_forest(
     if graph.edge_weight is not None and (
         not np.all(np.isfinite(graph.edge_weight)) or np.any(graph.edge_weight <= 0)
     ):
-        raise ValueError("LLST requires finite, strictly positive edge weights")
+        raise ValueError("LLSF (legacy LLST) requires finite, strictly positive edge weights")
     mask = np.zeros(graph.num_edges, dtype=bool)
     remaining = max(0, graph.num_nodes - 1) if max_edges is None else max(0, int(max_edges))
     if remaining == 0 or graph.num_edges == 0:
@@ -119,7 +119,7 @@ class _LocalSearch:
         self._eps = 1e-12
         self._rng = random.Random(self.seed)
         if self.candidate_strategy not in ("random", "tree_distance"):
-            raise ValueError("LLST candidate_strategy must be 'random' or 'tree_distance'")
+            raise ValueError("LLSF (legacy LLST) candidate_strategy must be 'random' or 'tree_distance'")
         if self.init_support not in (
             "glst",
             "maxst",
@@ -129,9 +129,10 @@ class _LocalSearch:
             "randst",
             "fast-randst",
             "spt",
+            "slst",
             "randspt",
         ):
-            raise ValueError(f"Unknown LLST init_support: {self.init_support!r}")
+            raise ValueError(f"Unknown LLSF (legacy LLST) init_support: {self.init_support!r}")
 
     def _build_component_tree(self, G, max_edges=None):
         full_tree_edges = max(0, G.number_of_nodes() - 1)
@@ -165,7 +166,7 @@ class _LocalSearch:
                 G.number_of_edges() if eval_edges is None else len(eval_edges)
             )
             print(
-                f"[LLST] init total_stretch={best_stretch:.4f} "
+                f"[LLSF] init total_stretch={best_stretch:.4f} "
                 f"mean_stretch={best_stretch / max(G.number_of_edges(), 1):.4f} "
                 f"sampled_eval_edges={sampled_eval_edges}"
             )
@@ -187,7 +188,7 @@ class _LocalSearch:
             passes += 1
             if self.verbose:
                 print(
-                    f"[LLST] pass={passes} add={added_edge} remove={removed_edge} "
+                    f"[LLSF] pass={passes} add={added_edge} remove={removed_edge} "
                     f"total_stretch={best_stretch:.4f} "
                     f"mean_stretch={best_stretch / max(G.number_of_edges(), 1):.4f}"
                 )
@@ -228,14 +229,19 @@ class _LocalSearch:
                 graph.num_nodes, graph.src, graph.dst, order, max_edges=max_edges
             )
         else:
+            options = (
+                {} if self.init_support == "slst" else {
+                    "buckets": self.fast_tree_buckets,
+                    "alpha": self.glst_alpha,
+                    "eta": self.glst_eta,
+                }
+            )
             mask = build_backbone(
                 graph,
                 self.init_support,
                 max_edges=max_edges,
                 seed=self.seed,
-                buckets=self.fast_tree_buckets,
-                alpha=self.glst_alpha,
-                eta=self.glst_eta,
+                **options,
             )
         tree = nx.Graph()
         tree.add_nodes_from(nodes)
@@ -304,7 +310,7 @@ class _LocalSearch:
 
         if self.candidate_strategy != "tree_distance":
             raise ValueError(
-                f"Unknown LLST candidate_strategy: {self.candidate_strategy!r}"
+                f"Unknown LLSF (legacy LLST) candidate_strategy: {self.candidate_strategy!r}"
             )
 
         if self.candidate_sample_size <= 0 or self.candidate_sample_size >= len(
@@ -457,7 +463,7 @@ class _LocalSearch:
 
 
 class _RandomShortestPathTree:
-    """Research randomized BFS/Dijkstra initializer, private to LLST."""
+    """Research randomized BFS/Dijkstra traversal shared by LLST and RandSPF."""
 
     def __init__(self, seed):
         self._rng = random.Random(seed)
