@@ -6,8 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Windows CI now reads repository text explicitly as UTF-8. The README image
+  check exercises a cp1252 default on every platform; lint rejects implicit
+  text encodings to prevent regressions.
+- Source distributions include the GIF demos and JSON measurements referenced
+  in the documentation.
+- CI installs built wheels in clean environments on Windows, macOS, and Linux,
+  plus the source archive on Linux, and exercises all five methods with core
+  dependencies only and imports isolated from the checkout.
+- Benchmark speed ratios now use the measured Fast reference for every row.
+
 ### Added
 
+- Runtime expectations in the README and `docs/performance.md`, with recorded
+  worker timings and separately labeled million-node extrapolations. Includes
+  Batch's measured 5.3× eight-worker speedup, full repetition data, memory
+  assumptions, and the cost of searching the evolving support graph.
+- Common 20%-retention, eight-worker timings with raw observations: Batch on
+  exactly 10K nodes / 100K edges and a completed 200K-node run, verified Fast
+  timing scope, separate Sample preprocessing/draw costs, and Heap's explicit
+  product-score setting for the paper comparison.
 - `backbone="llst"`: the research local-search low-stretch forest, available
   to Greedy, Heap, Batch and Fast through `backbone_options`. Includes exact
   improving cycle swaps, random/tree-distance candidate selection, sampled
@@ -35,6 +55,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `--workers` on `benchmarks/bench_methods.py`.
 
 ### Changed
+
+- Batch defaults to 256 sampled candidates and 64 insertions per cluster on
+  inputs with at least 1,024 edges; smaller inputs retain 64/8. Explicit sizes
+  remain supported. Larger insertion batches reduce repeated searches but may
+  change the selected support. Candidate pools are partitioned once and
+  filtered within clusters instead of rescanning the entire graph per cluster.
+- Grid demos offer `--quick` (6×6, two sampled LLST swaps). Backbone tuning
+  uses an 8×8 example with two sampled swaps by default; larger/exhaustive
+  settings remain available. The runtime benchmark skips Greedy/Heap above
+  1,000 edges unless explicitly requested and exposes Batch size controls.
 
 - LLST rejects graphs above 1,000 undirected input edges before construction,
   with a runtime explanation and faster backbone alternatives. The positive

@@ -14,6 +14,8 @@ Two knobs matter most, and they do different jobs:
 
 from __future__ import annotations
 
+import argparse
+
 import numpy as np
 
 import scaffold
@@ -25,7 +27,20 @@ def section(title):
     print(f"\n{'=' * 76}\n{title}\n{'=' * 76}")
 
 
-G = scaffold.grid_graph(14, 14)
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--side", type=int, default=8, help="grid side length (default: 8)")
+parser.add_argument("--exhaustive-llst", action="store_true",
+                    help="use 10 exhaustive LLST swaps instead of 2 sampled swaps")
+args = parser.parse_args()
+if args.side < 2:
+    parser.error("--side must be at least 2")
+if 2 * args.side * (args.side - 1) > 1000:
+    parser.error("this LLST comparison requires at most 1,000 input edges")
+llst_options = {"init_support": "glst", "max_passes": 10}
+if not args.exhaustive_llst:
+    llst_options.update(max_passes=2, candidate_sample_size=16, cycle_sample_size=4)
+
+G = scaffold.grid_graph(args.side, args.side)
 KEEP = 0.7
 print(f"graph: {G}  (delta_min = {(G.num_nodes - 1) / G.num_edges:.3f})")
 
@@ -37,7 +52,7 @@ print(f"  {scaffold.available_backbones()}\n")
 print(f"  {'backbone':12s} {'forest':>7s} {'stretch':>10s} {'edges':>7s} {'comp':>5s}")
 print(f"  {'-' * 12} {'-' * 7} {'-' * 10} {'-' * 7} {'-' * 5}")
 for name in ("fast-maxst", "maxst", "mst", "fast-randst", "randst", "spt", "glst", "llst"):
-    mask = build_backbone(G, name, seed=0)
+    mask = build_backbone(G, name, seed=0, **(llst_options if name == "llst" else {}))
     # total_stretch: sum over non-tree edges of dist_T(u,v)/w(e). Lower is a
     # better starting point -- fewer long detours for the growth phase to fix.
     stretch = tree_scores(G.num_nodes, G.src, G.dst, mask)["total_stretch"]
@@ -52,14 +67,15 @@ print("  to sort by, both fall back to the same deterministic scan. Give the gri
 print("  weights and they diverge.")
 print("  fast-randst avoids constructing randst's full random permutation; it is")
 print("  normally faster, while randst provides a more thoroughly shuffled order.")
-print("  llst refines glst with up to 10 exhaustive improving cycle swaps;")
+search = "10 exhaustive" if args.exhaustive_llst else "2 sampled"
+print(f"  llst refines glst with up to {search} improving cycle swaps;")
 print("  its forest has the same edge budget, with shorter total detours.")
 
 
 # ----------------------------------------------------------------------
 section("2. Weighted graphs: the backbone follows the weights")
 # ----------------------------------------------------------------------
-Gw = scaffold.grid_graph(14, 14, weight="distance")  # heavier near the centre
+Gw = scaffold.grid_graph(args.side, args.side, weight="distance")  # heavier near the centre
 print(f"  {Gw}, weights in [{Gw.edge_weight.min():.3f}, {Gw.edge_weight.max():.3f}]\n")
 for name in ("fast-maxst", "maxst", "fast-mst", "mst"):
     mask = build_backbone(Gw, name, seed=0)

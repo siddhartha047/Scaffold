@@ -104,7 +104,11 @@ jobs:
       - run: pytest tests/test_adapters.py
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -116,15 +120,13 @@ jobs:
           python -m build
           python -m twine check dist/*
       - name: Install the built wheel in a clean environment
-        run: |
-          python -m venv /tmp/check
-          /tmp/check/bin/pip install dist/*.whl
-          /tmp/check/bin/python -c "
-          import scaffold
-          print(scaffold.__version__)
-          print(scaffold.fast(scaffold.grid_graph(12, 12), keep_ratio=0.7).summary())
-          "
+        if: runner.os != 'Linux'
+        run: python validation/check_distributions.py --dist dist
+      - name: Install wheel and source distribution in clean environments
+        if: runner.os == 'Linux'
+        run: python validation/check_distributions.py --dist dist --sdist
       - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
         with:
           name: dist
           path: dist/

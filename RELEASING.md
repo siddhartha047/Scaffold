@@ -95,15 +95,9 @@ python -m build
 # 4. the metadata is valid
 python -m twine check dist/*
 
-# 5. the built wheel actually works, in a fresh venv
-python -m venv /tmp/scaffold-test
-/tmp/scaffold-test/bin/pip install "dist/scaffold_sparse-0.1.0-py3-none-any.whl[all]"
-/tmp/scaffold-test/bin/python -c "
-import scaffold
-print(scaffold.__version__)
-r = scaffold.fast(scaffold.grid_graph(20, 20), keep_ratio=0.6)
-print(r.summary(), r.num_components())
-"
+# 5. install wheel and source archive in separate, clean environments
+# Works on Windows, macOS, and Linux; exercises all methods with core deps.
+python validation/check_distributions.py --dist dist --sdist
 ```
 
 Step 5 matters more than it looks: it is the only check that the *packaged*

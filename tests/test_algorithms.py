@@ -333,6 +333,45 @@ def test_batch_rejects_a_topk_that_commits_the_whole_sample(grid):
         scaffold.batch(grid, keep_ratio=0.7, sample_size=8, add_per_round=8)
 
 
+@pytest.mark.parametrize("side,sample,add", [(8, 64, 8), (24, 256, 64)])
+def test_batch_automatic_sizes_preserve_budget_and_connectivity(side, sample, add):
+    graph = scaffold.grid_graph(side, side)
+    result = scaffold.batch(graph, keep_ratio=0.7, seed=5, workers=1)
+    explicit = scaffold.batch(
+        graph, keep_ratio=0.7, seed=5, workers=1,
+        sample_size=sample, add_per_round=add,
+    )
+    assert result.metadata["sample_size"] == sample
+    assert result.metadata["add_per_round"] == add
+    assert result.sparse_edges == int(np.ceil(0.7 * graph.num_edges))
+    assert result.num_components() == 1
+    np.testing.assert_array_equal(result.mask, explicit.mask)
+
+
+@pytest.mark.parametrize("options,sample,add", [
+    ({"sample_size": 32}, 32, 8),
+    ({"add_per_round": 4}, 64, 4),
+    ({"sample_size": 64, "add_per_round": 8}, 64, 8),
+])
+def test_batch_explicit_sizes_override_automatic_defaults(options, sample, add):
+    graph = scaffold.grid_graph(24, 24)
+    result = scaffold.batch(graph, keep_ratio=0.7, seed=0, **options)
+    assert result.metadata["sample_size"] == sample
+    assert result.metadata["add_per_round"] == add
+    assert result.sparse_edges == int(np.ceil(0.7 * graph.num_edges))
+    assert result.num_components() == 1
+
+
+@pytest.mark.parametrize("clusters", [1, 4])
+def test_large_batch_is_deterministic_across_workers_and_clusters(clusters):
+    graph = scaffold.grid_graph(24, 24)
+    single = scaffold.batch(graph, keep_ratio=0.8, clusters=clusters, workers=1, seed=2)
+    parallel = scaffold.batch(graph, keep_ratio=0.8, clusters=clusters, workers=4, seed=2)
+    np.testing.assert_array_equal(single.mask, parallel.mask)
+    assert parallel.sparse_edges == int(np.ceil(0.8 * graph.num_edges))
+    assert parallel.num_components() == 1
+
+
 def test_fast_topk_is_optimal_for_the_static_score(grid):
     """Fast retains the highest static scores that fit after its backbone."""
     result = scaffold.fast(

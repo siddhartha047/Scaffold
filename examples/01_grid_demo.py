@@ -48,10 +48,12 @@ BACKBONE_NAMES = {
 }
 
 
-def figure_backbones(graph, positions, out_dir):
+def figure_backbones(graph, positions, out_dir, quick=False):
     """Every SCAFFOLD run starts from a spanning forest. They differ a lot."""
     names = ["fast-maxst", "maxst", "fast-randst", "randst", "spt", "glst", "llst"]
     llst_options = {"init_support": "glst", "max_passes": 10}
+    if quick:
+        llst_options.update(max_passes=2, candidate_sample_size=16, cycle_sample_size=4)
     measurements = {}
     masks = {}
     for name in names:
@@ -189,7 +191,7 @@ def _draw_backbones(graph, positions, out_dir, masks, measurements):
         0.5,
         0.015,
         "Blue: retained. Gray dashes: omitted. Stretch: total omitted-edge detour length. "
-        "LLST: up to 10 exhaustive swaps; seed 0.",
+        f"LLST: {_llst_search_label(measurements)}; seed {SEED}.",
         ha="center",
         fontsize=10,
         color="#4b5563",
@@ -255,7 +257,7 @@ def _animate_backbones(graph, positions, out_dir, masks, measurements):
             note = (
                 f"GLST → LLST: {initial:,.0f} → {final:,.0f} stretch "
                 f"({1 - final / max(1.0, initial):.1%} reduction); "
-                "up to 10 exhaustive swaps."
+                f"{_llst_search_label(measurements)}."
             )
         else:
             note = (
@@ -267,6 +269,15 @@ def _animate_backbones(graph, positions, out_dir, masks, measurements):
         plt.close(fig)
 
     return _save_gif(frames, out_dir, "grid_backbones.gif", duration=2200, final_hold=4500)
+
+
+def _llst_search_label(measurements):
+    options = measurements["llst"]["options"]
+    sampled = any(options.get(key, 0) for key in (
+        "candidate_sample_size", "cycle_sample_size", "eval_sample_size"
+    ))
+    mode = "sampled" if sampled else "exhaustive"
+    return f"up to {options.get('max_passes', 10)} {mode} swaps"
 
 
 def _gif_frame(fig):
@@ -327,36 +338,67 @@ def figure_methods(graph, positions, out_dir):
 
 
 def figure_ratios(graph, positions, out_dir):
-    """Tightening the budget. Below delta_min the graph must fragment."""
+    """README overview: the input and five progressively smaller budgets."""
     import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import FancyBboxPatch
 
     delta_min = (graph.num_nodes - 1) / graph.num_edges
-    ratios = [0.95, 0.85, 0.75, 0.65, 0.45]
-    fig, axes = plt.subplots(2, 3, figsize=(11.4, 8.8))
-    axes = axes.ravel()
-    _backbone_panel(graph, positions, axes[0], "Input grid", f"{graph.num_edges} edges")
-    for ax, ratio in zip(axes[1:], ratios):
+    ratios = [0.85, 0.75, 0.65, 0.55, 0.45]
+    panels = [("Input grid", f"{graph.num_edges} edges", None, False)]
+    for ratio in ratios:
         result = scaffold.fast(
             graph, keep_ratio=ratio, backbone=DEMO_BACKBONE, seed=SEED
         )
         components = result.num_components()
-        _backbone_panel(
-            graph,
-            positions,
-            ax,
-            f"Target {ratio:.0%}",
-            f"{result.sparse_edges} edges · {_count_label(components, 'component')}",
-            mask=result.mask,
+        detail = "connected" if components == 1 else _count_label(components, "component")
+        panels.append(
+            (f"{ratio:.0%} retained", f"{result.sparse_edges} edges · {detail}",
+             result.mask, ratio < delta_min)
         )
-        if ratio < delta_min:
-            ax.title.set_color("#b45309")
-    _grid_heading(
-        fig,
-        "A smaller edge budget",
-        f"Scaffold-Fast · RandST backbone · connectivity floor {delta_min:.1%} · seed {SEED}",
-        "Below the connectivity floor, an exact-budget support must split into components.",
+        print(f"  {ratio:.0%}: {result.sparse_edges} edges, {components} components")
+
+    fig = plt.figure(figsize=(12, 8.4), facecolor="white")
+    fig.text(.035, .955, "Scaffold", fontsize=29, fontweight="bold", color="#1f5fbf")
+    fig.text(.035, .915, "Reduce the edge budget. Keep every node.",
+             fontsize=14, color="#4b5563")
+    fig.text(.965, .954, f"{graph.num_nodes} nodes · Scaffold-Fast · RandST backbone",
+             ha="right", fontsize=11, color="#4b5563")
+    fig.legend(
+        handles=[
+            Line2D([0], [0], color="#1f5fbf", lw=2, label="Retained edge"),
+            Line2D([0], [0], color="#a5abb5", lw=1.4,
+                   linestyle=(0, (2, 2)), label="Omitted edge"),
+        ],
+        loc="upper right", bbox_to_anchor=(.972, .938), frameon=False,
+        ncol=2, fontsize=10, handlelength=2, columnspacing=1.4,
     )
-    return _save(fig, out_dir, "grid_ratios.png")
+
+    for index, (title, detail, mask, below_floor) in enumerate(panels):
+        row, col = divmod(index, 3)
+        left, bottom = .028 + .322 * col, .493 - .417 * row
+        width, height = .300, .390
+        fig.add_artist(FancyBboxPatch(
+            (left, bottom), width, height, transform=fig.transFigure,
+            boxstyle="round,pad=0.007,rounding_size=0.012",
+            facecolor="#f4f7fc" if index == 0 else "#fafbfc",
+            edgecolor="#dce3ed", linewidth=.8, zorder=0,
+        ))
+        color = "#b45309" if below_floor else "#1f5fbf"
+        fig.text(left + width / 2, bottom + .352, title,
+                 ha="center", fontsize=20, fontweight="semibold", color=color)
+        fig.text(left + width / 2, bottom + .320, detail,
+                 ha="center", fontsize=11,
+                 color="#b45309" if below_floor else "#4b5563")
+        ax = fig.add_axes([left + .012, bottom + .010, width - .024, .299])
+        viz.draw_graph(graph, positions=positions, ax=ax, mask=mask,
+                       node_size=10, linewidth=1.7)
+
+    fig.text(.5, .024,
+             f"Connectivity needs at least {delta_min:.1%} of this grid's edges; "
+             "smaller budgets split it into components.",
+             ha="center", fontsize=11, color="#4b5563")
+    return _save(fig, out_dir, "grid_ratios.png", dpi=200)
 
 
 def figure_scores(graph, positions, out_dir):
@@ -565,12 +607,12 @@ def _animate_coverage(graph, positions, out_dir, draws, unions, curve, component
     return _save_gif(frames, out_dir, "grid_coverage.gif", duration=750, final_hold=3000)
 
 
-def _save(fig, out_dir, name):
+def _save(fig, out_dir, name, dpi=150):
     import matplotlib.pyplot as plt
 
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, name)
-    fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
+    fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     print(f"  wrote {path}")
     return path
@@ -579,14 +621,20 @@ def _save(fig, out_dir, name):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="docs/images", help="output directory")
-    parser.add_argument("--rows", type=int, default=ROWS)
-    parser.add_argument("--cols", type=int, default=COLS)
+    parser.add_argument("--rows", type=int, default=None)
+    parser.add_argument("--cols", type=int, default=None)
+    parser.add_argument(
+        "--quick", action="store_true",
+        help="Use a 6x6 grid unless dimensions are given, and two sampled LLST swaps.",
+    )
     parser.add_argument(
         "--only",
         choices=("backbones", "methods", "ratios", "scores", "coverage"),
         help="regenerate just one figure",
     )
     args = parser.parse_args()
+    args.rows = args.rows if args.rows is not None else (6 if args.quick else ROWS)
+    args.cols = args.cols if args.cols is not None else (6 if args.quick else COLS)
 
     graph = scaffold.grid_graph(args.rows, args.cols)
     if args.only in (None, "backbones") and graph.num_edges > DEFAULT_LLST_MAX_INPUT_EDGES:
@@ -619,7 +667,10 @@ def main():
     selected = [args.only] if args.only else list(figures)
     for index, name in enumerate(selected, start=1):
         print(f"\n[{index}/{len(selected)}] {name}")
-        figures[name](graph, positions, args.out)
+        if name == "backbones":
+            figure_backbones(graph, positions, args.out, quick=args.quick)
+        else:
+            figures[name](graph, positions, args.out)
     print("\ndone.")
 
 

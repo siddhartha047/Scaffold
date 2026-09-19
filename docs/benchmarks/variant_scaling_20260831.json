@@ -1,0 +1,90 @@
+{
+  "kind": "historical_measurements",
+  "date": "2026-08-31",
+  "provenance": "Recovered outputs of bench4.py and final.py from the original standalone-package evaluation.",
+  "protocol": "One timed public API call per worker count after small-input kernel warm-up. Not best of three. Historical code; not rerun with current package.",
+  "hardware": {
+    "reported_cpu_count": 32,
+    "cpu_model": null,
+    "note": "Specific CPU model not recorded in recovered output."
+  },
+  "graph_generator": {
+    "seed": 0,
+    "weighted": false,
+    "description": "default_rng(seed) draws n*degree_argument source and destination indices; remove self-loops, canonicalize min/max endpoints, deduplicate with numpy.unique, pass symmetric edge_index to from_edge_index."
+  },
+  "excluded": [
+    "graph generation",
+    "normalization",
+    "JIT warm-up",
+    "GNN training"
+  ],
+  "records": [
+    {
+      "method": "fast",
+      "source_script": "final.py",
+      "n": 200000,
+      "m": 2399834,
+      "degree_argument": 12,
+      "keep_ratio": 0.5,
+      "seed": 0,
+      "timed_scope": "Public fast call including backbone and result assembly",
+      "seconds": {
+        "1": 2.79,
+        "2": 1.7,
+        "4": 1.11,
+        "8": 0.92,
+        "16": 0.77
+      }
+    },
+    {
+      "method": "sample",
+      "source_script": "final.py",
+      "n": 200000,
+      "m": 2399834,
+      "degree_argument": 12,
+      "tree_count": 8,
+      "seed": 0,
+      "timed_scope": "Public sample preprocessing; draw excluded",
+      "seconds": {
+        "1": 29.58,
+        "2": 9.93,
+        "4": 9.32,
+        "8": 10.49,
+        "16": 9.11
+      }
+    },
+    {
+      "method": "heap",
+      "source_script": "bench4.py",
+      "n": 4000,
+      "m": 39893,
+      "degree_argument": 10,
+      "keep_ratio": 0.5,
+      "seed": 0,
+      "timed_scope": "Public sparsify call including backbone and result assembly",
+      "seconds": {
+        "1": 130.92,
+        "4": 51.08,
+        "8": 38.89
+      }
+    },
+    {
+      "method": "greedy",
+      "source_script": "bench4.py",
+      "n": 400,
+      "m": 3131,
+      "degree_argument": 8,
+      "keep_ratio": 0.72,
+      "seed": 0,
+      "timed_scope": "Public sparsify call including backbone and result assembly",
+      "seconds": {
+        "1": 18.04,
+        "4": 9.28,
+        "8": 6.99
+      }
+    }
+  ],
+  "outputs_identical_across_measured_workers": true,
+  "precision": "Times preserved at original printed precision (two decimal places)."
+}

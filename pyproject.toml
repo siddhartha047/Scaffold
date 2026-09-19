@@ -90,7 +90,9 @@ target-version = "py39"
 src = ["src", "tests", "examples"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B"]
+preview = true
+explicit-preview-rules = true
+select = ["E", "F", "W", "I", "UP", "B", "PLW1514"]  # explicit encoding for text I/O
 ignore = [
     "E501",    # line length is handled by the formatter
     "B905",    # zip(strict=) is 3.10+

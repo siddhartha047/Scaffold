@@ -19,6 +19,22 @@ python examples/04_backbones_and_tuning.py
 python examples/05_local_search_backbone.py
 ```
 
+For a fast preview, use `python examples/01_grid_demo.py --quick --out demo-preview`.
+This uses a 6×6 grid and two sampled LLST swaps; the standard command still
+reproduces the README's 12×12 grid and exhaustive LLST settings.
+`04_backbones_and_tuning.py` now defaults to an 8×8 grid and two sampled LLST
+swaps; `--side 14 --exhaustive-llst` restores the larger exhaustive comparison.
+The 1,000-edge LLST input guard applies in both modes.
+
+The runtime benchmark also avoids long reference runs by default:
+
+```bash
+python benchmarks/bench_methods.py --sizes 16 32 64
+# Opt into Greedy/Heap above 1,000 edges, or pin Batch's previous sizes:
+python benchmarks/bench_methods.py --sizes 24 --reference-max-edges 0
+python benchmarks/bench_methods.py --batch-sample-size 64 --batch-add-per-round 8
+```
+
 ## Why a grid graph?
 
 A 2-D lattice has a regular layout that makes supporting paths, omitted edges,
@@ -28,6 +44,12 @@ The method, smaller-budget, and sampling demos share a seeded `randst`
 backbone (`fixed-randst` for Sample). The backbone comparison still shows
 each named construction.
 
+These grid inputs are connected, so the backbone figures show single spanning
+trees. Throughout the package, the same “tree” methods compute **spanning
+forests** on disconnected inputs: one tree per component, with isolated
+vertices preserved. Only the backbone must be acyclic; the final sparse
+support can include additional edges and cycles.
+
 `01_grid_demo.py` writes five PNG figures and two GIFs to `docs/images/`:
 
 | file | shows |
@@ -35,7 +57,7 @@ each named construction.
 | `grid_backbones.png` | input grid and seven backbones, with full method names and measured stretch |
 | `grid_backbones.gif` | animated comparison of the same seven completed forests; each frame expands the name and explains construction; LLST is last |
 | `grid_methods.png` | input and five algorithms at one budget in a 2×3 grid |
-| `grid_ratios.png` | input and five Fast retention ratios in a 2×3 grid |
+| `grid_ratios.png` | README opening visual: input, then 85%, 75%, 65%, 55%, and 45% retention with Fast and RandST, in a 2×3 grid |
 | `grid_scores.png` | input, Sample weights, inclusion probabilities, and one draw in a 2×2 grid |
 | `grid_coverage.png` | three union snapshots and the coverage curve in a 2×2 grid |
 | `grid_coverage.gif` | a 2×2 animation of input, current view, cumulative union, and coverage |
@@ -45,6 +67,11 @@ To regenerate only the backbone comparison:
 ```bash
 python examples/01_grid_demo.py --only backbones --out docs/images
 ```
+
+Regenerate the README's opening budget visual with
+`python examples/01_grid_demo.py --only ratios --out docs/images`.
+Every panel keeps all 144 nodes. The 45% panel has 25 components because
+its budget is below this grid's connectivity floor (143 edges, or 54.2%).
 
 It also writes `grid_backbones.json` with the seed, LLST options, retained edge
 IDs, edge counts, component counts, and omitted-edge stretch for each forest. LLST uses the

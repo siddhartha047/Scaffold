@@ -1,20 +1,53 @@
-# SCAFFOLD
+# Scaffold
 
-**Dilation- and congestion-aware graph sparsification.**
+**Reduce the edge budget. Keep every node.**
 
-Scaffold builds a sparse graph in two stages: choose a **support backbone**
+![Scaffold on a grid: input, then 85%, 75%, 65%, 55%, and 45% edge retention](docs/images/grid_ratios.png)
+
+Scaffold-Fast with a seeded random spanning tree (RandST) backbone. Blue edges
+are retained; gray dashes are omitted. The 45% view illustrates a budget below
+this grid's connectivity floor; all 144 nodes remain.
+
+Scaffold is a **dilation- and congestion-aware graph sparsification** package.
+It builds a sparse graph in two stages: choose a **support backbone**
 (a spanning forest), then add edges whose missing connections require long or
 congested detours. Each output meets the requested edge budget and preserves
 the input's connected components whenever that budget can hold the backbone.
 
+**Tree terminology:** “spanning tree” in method names and descriptions is
+shorthand for a **spanning forest**: one tree per input connected component,
+with isolated vertices preserved. On a connected input, this forest is a
+single spanning tree.
+
 The core uses NumPy and SciPy. Inputs can be NetworkX graphs, PyTorch Geometric
 `Data`, SciPy sparse matrices, or `(2, m)` edge-index arrays.
+
+## Measured runtimes
+
+Paper measurements at **20% edge retention, 8 CPU workers** on synthetic
+unweighted graphs. Edge counts are unique undirected edges.
+
+| Variant | Nodes | Edges | Measured time |
+|---|---:|---:|---:|
+| Greedy | 400 | 3,131 | **0.75 s** |
+| Heap (product score) | 4,000 | 39,893 | **28.65 s** |
+| Batch | 10,000 | 250,000 | **32.64 s** |
+| Fast | 200,000 | 2,399,834 | **0.73 s** |
+| Sample (8 scoring backbones) | 200,000 | 2,399,834 | **5.01 s** preprocessing + **0.048 s** per cached draw |
+
+These are warmed-kernel medians on a shared AMD EPYC 7282 host. Construction
+includes the backbone and output assembly; input loading, normalization, JIT
+startup, and GNN training are excluded. Batch uses 512 candidates / 64
+insertions per cluster, with ten clusters. The graph sizes differ: Batch on
+the 200K-node graph took **57.4 minutes** with a larger insertion batch
+(256 per cluster).
+[Full settings, measurements, and scaling guidance](docs/performance.md).
 
 [Installation](#installation) · [Quick start](#quick-start) ·
 [Usage](#standalone-usage) · [Algorithms](#the-five-algorithms) ·
 [Backbones](#support-backbones) · [Connectivity](#the-connectivity-floor) ·
 [Tuning](#tuning-the-objective) · [PyG](#pytorch-geometric) ·
-[Parallelism](#parallelism) · [Visual demos](#visual-demos) ·
+[Parallelism](#parallelism) · [Runtime](#runtime-expectations) · [Visual demos](#visual-demos) ·
 [Documentation](#documentation)
 
 ---
@@ -25,6 +58,9 @@ During private testing, install from the private GitHub repository:
 
 ```bash
 pip install "scaffold-sparse @ git+ssh://git@github.com/siddhartha047/Scaffold.git"
+
+# Recommended for compiled kernels on medium/large graphs:
+pip install "scaffold-sparse[speed] @ git+ssh://git@github.com/siddhartha047/Scaffold.git"
 ```
 
 After the public PyPI release, the shorter commands below become available.
@@ -43,8 +79,8 @@ import name is `scaffold` (`import scaffold_sparse` is also supported).
 
 > **numba is optional but strongly recommended.** Without it the union-find,
 > LCA and prefix-sum kernels fall back to pure Python loops — correct, but only
-> fast enough for small graphs. The first call in a process pays a one-off JIT
-> compilation cost of a few hundred milliseconds.
+> fast enough for small graphs. Initial calls can take longer while compiled
+> kernels initialize; the measurements above exclude that startup cost.
 
 ---
 
@@ -63,7 +99,7 @@ A_sparse = result.to_scipy()
 
 `keep_ratio=0.6` retains `ceil(0.6 * m)` undirected edges. Use `num_edges=`
 instead for an explicit budget. Fast uses `fast-maxst` as its default backbone;
-pass `backbone="randst"` for a seeded random spanning tree. The visual demos
+pass `backbone="randst"` for a seeded random spanning forest. The visual demos
 below use RandST for the algorithm, budget, and sampling comparisons.
 
 ---
@@ -136,6 +172,16 @@ Greedy, Heap, Batch, and Fast return a sparse-graph result. Sample returns
 sampling weights; call `.draw(keep_ratio=..., seed=...)` to obtain a support.
 See the [algorithm guide](docs/algorithms.md) for complexity bounds and measurements.
 
+Batch chooses its sizes automatically: **64 candidates / 8 insertions** below
+1,024 input edges, and **256 / 64** on larger inputs. Larger insertion batches
+reduce construction time but can change support quality. Set
+`sample_size=64, add_per_round=8` to reproduce the previous behavior.
+For scalable single-pass construction, use Fast; for repeated draws, precompute
+Sample once and reuse `.draw()`. Install the `speed` extra for compiled kernels.
+Check the [runtime expectations](#runtime-expectations) before a large Batch
+run: its repeated searches cover the growing support even when candidates
+are partitioned into clusters.
+
 <details>
 <summary>Batch construction cost</summary>
 
@@ -202,8 +248,12 @@ The backbone is the spanning forest SCAFFOLD grows from, and it is what makes
 the connectivity guarantee possible.
 
 The names below also label the [backbone figures](#choose-a-support-backbone).
-“Tree” describes a connected input; for disconnected inputs, each method builds
-one tree per component, forming a spanning forest.
+**All built-in backbone constructions except `none` compute a spanning
+forest**, even when their conventional names say “tree.” For `n` nodes and
+`c` input components, the full backbone contains `n − c` edges and one tree
+per component; an isolated vertex is a one-node tree. No edges are invented
+between disconnected components. The **final sparse support can contain
+cycles** because Scaffold adds edges to this initial forest.
 
 | API name | Full name | How it builds the backbone |
 |---|---|---|
@@ -236,8 +286,8 @@ See [`docs/backbones.md`](https://github.com/siddhartha047/Scaffold/blob/main/do
 
 For small graphs, the research local-search low-stretch tree is available as
 `backbone="llst"` (requires `pip install "scaffold-sparse[networkx]"`). It
-refines an initial tree through improving cycle-edge swaps before Scaffold
-adds the remaining budget:
+refines an initial spanning forest through improving cycle-edge swaps within
+each component before Scaffold adds the remaining budget:
 
 ```python
 result = scaffold.fast(
@@ -419,6 +469,74 @@ Python loops, and `workers` has no effect.
 
 ---
 
+## Runtime expectations
+
+**Measured at 20% edge retention with eight CPU workers**, using compiled
+Numba kernels on synthetic unweighted graphs:
+
+| Method / phase | Nodes | Undirected edges | Seconds |
+|---|---:|---:|---:|
+| Fast | 200,000 | 2,399,834 | **0.73** |
+| Sample preprocessing, 8 random backbones | 200,000 | 2,399,834 | **5.01** |
+| Sample cached draw | 200,000 | 2,399,834 | **0.048** |
+| Batch, 512 candidates / 64 insertions per cluster | 10,000 | 250,000 | **32.64** |
+| Batch, 512 candidates / 256 insertions per cluster | 10,000 | 100,000 | **1.58** |
+| Batch, 512 candidates / 256 insertions per cluster | 200,000 | 2,399,834 | **3444.83** |
+| Heap, product score | 4,000 | 39,893 | 28.65 |
+| Greedy | 400 | 3,131 | 0.75 |
+
+Fast's subsecond time was rechecked: all 2,199,835 non-backbone candidates
+were scored, and the returned support has exactly 479,967 edges and one
+connected component. Fast uses one tree scoring pass; Batch repeatedly
+searches the evolving support. The large Batch run took **57.4 minutes**
+with 512/256 batches, ten candidate clusters and the same 20% budget.
+Clustering organizes candidates; it does not restrict searches to local graphs.
+
+The main-paper Batch setting uses 512/64 batches and ten clusters on the
+10K-node / 250K-edge graph. Three calls took 32.64, 32.34, and 32.94 s
+(median **32.64 s**). Each returned the same connected 50,000-edge support
+after 65 rounds. [Raw Batch measurements](docs/benchmarks/batch_10k_250k_b512_r64_20260919.json).
+
+Construction times include the backbone and output assembly, with normalized
+inputs already in memory and compiled kernels warmed. Loading, normalization,
+JIT startup and GNN training are excluded. Results are medians of three calls,
+except the large Batch run (one complete call) and cached Sample draws (six).
+Sample preprocessing is paid once; its first warm draw took about 0.12 s
+to prepare a budget-specific plan, then cached draws took about 0.05 s.
+Different graph sizes are shown explicitly and are not a same-input comparison.
+The shared host was not exclusively reserved; these are observations, not
+runtime guarantees. [Raw observations and settings](docs/benchmarks/variant_delta20_20260918.json)
+and [historical worker scaling](docs/performance.md#historical-worker-scaling)
+are available for reproducibility.
+
+**Planning estimates for 1 million nodes and 100 million undirected edges,
+using 8 workers — not benchmark results:**
+
+| Method / setting | Rough time |
+|---|---|
+| Fast, 50% retention | **1–3 minutes** |
+| Sample, 8 backbones | **10–30 minutes preprocessing**, reused for later draws |
+| Batch, 10% retention | **Days to weeks** |
+| Batch, 50% retention | **Potentially months** |
+
+These extrapolations assume an unweighted graph already normalized in RAM,
+the `speed` extra, and enough memory to avoid swapping. They are planning
+guidance, not validated runtime bounds. At this scale, use Fast for one support
+or Sample for repeated draws. Batch recomputes paths on the entire current
+support; partitioning candidates does not restrict the graph searched.
+Larger insertion batches change the cost and may change support quality.
+
+The endpoint arrays alone occupy about **1.6 GB** at 100 million edges with
+64-bit indices; each additional float64 per-edge array adds **0.8 GB**.
+Actual peak RAM is substantially higher, particularly for concurrent Sample
+preprocessing. If an input counts both directions of each undirected edge,
+100 million entries correspond to about 50 million unique edges.
+
+See the [runtime guide](docs/performance.md) for settings, hardware, recorded
+measurements, and the estimation method.
+
+---
+
 ## Visual demos
 
 These simulations use a **12×12 grid: 144 nodes and 264 undirected edges**.
@@ -427,6 +545,8 @@ All comparisons use seed 0. Each caption explains the edge colors and
 measurements; backbone panels spell out their method names.
 The algorithm, edge-budget, and sampling demos share a seeded **RandST**
 backbone: a random spanning tree (`randst`, or `fixed-randst` for Sample).
+These grids are connected, so their spanning forests are single trees;
+the same methods construct one tree per component on disconnected inputs.
 
 ### Choose a support backbone
 
@@ -441,7 +561,11 @@ Greedy, Heap, Batch, and Fast.
 The GIF names and explains each completed forest, finishing with LLST.
 Blue edges are retained; gray dashed edges are omitted.
 
-![Animated comparison with full backbone names and construction explanations, ending with LLST](docs/images/grid_backbones.gif)
+<p align="center">
+  <a href="docs/images/grid_backbones.gif">
+    <img src="docs/images/grid_backbones.gif" width="560" alt="Animated comparison with full backbone names and construction explanations, ending with LLST">
+  </a>
+</p>
 
 The LLST example uses its default GLST initializer and up to 10 exhaustive
 search passes. **LLST is expensive and intended for small graphs:** inputs
@@ -487,10 +611,10 @@ compares repeated draws with a single fixed support through epoch 50.
 
 ### Reduce the edge budget
 
-This grid compares Scaffold-Fast at five retention ratios using a seeded
-RandST backbone. Connectivity is preserved while the budget can hold a
-spanning tree. This graph requires at least **143 retained edges (54.2% of
-its edges)**; smaller budgets must disconnect it.
+The opening grid compares Scaffold-Fast at **85%, 75%, 65%, 55%, and 45%**
+edge retention using a seeded RandST backbone. Connectivity is preserved while
+the budget can hold a spanning tree. This graph requires at least **143 retained edges (54.2% of
+its edges)**; the 45% view keeps 119 edges and has 25 connected components.
 
 ![Input and five retention ratios in a two-by-three grid](docs/images/grid_ratios.png)
 
@@ -505,6 +629,10 @@ python examples/01_grid_demo.py --out docs/images
 # Regenerate one comparison, including its GIF when available:
 python examples/01_grid_demo.py --only backbones --out docs/images
 python examples/01_grid_demo.py --only coverage --out docs/images
+python examples/01_grid_demo.py --only ratios --out docs/images
+
+# Quick preview: smaller graph and sampled LLST refinement.
+python examples/01_grid_demo.py --quick --out demo-preview
 ```
 
 The generator writes five PNGs, two GIFs, and the
@@ -519,6 +647,7 @@ grid simulations; their quality rankings need not hold on other graphs.
 | | |
 |---|---|
 | [`docs/algorithms.md`](https://github.com/siddhartha047/Scaffold/blob/main/docs/algorithms.md) | The objective, and how each variant evaluates it |
+| [`docs/performance.md`](docs/performance.md) | Measured runtimes, large-graph estimates, memory and worker guidance |
 | [`docs/api.md`](https://github.com/siddhartha047/Scaffold/blob/main/docs/api.md) | Complete API reference |
 | [`docs/backbones.md`](https://github.com/siddhartha047/Scaffold/blob/main/docs/backbones.md) | Choosing and writing support backbones |
 | [`docs/pytorch-geometric.md`](https://github.com/siddhartha047/Scaffold/blob/main/docs/pytorch-geometric.md) | GNN integration in depth |

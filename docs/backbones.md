@@ -1,12 +1,27 @@
 # Support backbones
 
-The backbone is the spanning forest SCAFFOLD grows from. It does two jobs:
+The backbone is the spanning forest Scaffold grows from.
+
+**“Spanning tree” is shorthand for “spanning forest” throughout the package.**
+Conventional names such as MaxST, MinST, RandST, SPT, GLST, and LLST retain
+the word “tree,” but their implementations construct one tree per connected
+component of the input. Isolated vertices remain as one-node trees. A
+connected input is the special case with a single spanning tree.
+
+A full backbone has `n − c` edges for `n` nodes and `c` input components.
+This applies to the built-in constructions other than `none`, without a
+restrictive `max_edges` cap. A smaller cap or a budget below `n − c` can only
+produce a partial forest; custom backbones must satisfy the same spanning
+condition to provide the connectivity guarantee.
+
+The backbone does two jobs:
 
 1. **It is the connectivity guarantee.** A spanning forest of a graph with `n`
    nodes and `c` components has `n − c` edges and, by construction, exactly
-   those `c` components. Every edge added afterwards can only merge things
-   further, so the output's component count is fixed the moment the backbone is
-   built.
+   those `c` components. Added edges come from the input graph, so they cannot
+   join distinct input components. The final support preserves each component
+   when its budget can hold the full backbone; it can contain cycles after
+   additional edges are retained.
 2. **It is the reference the objective is measured against.** Dilation is
    `dist_F(u, v) / w(e)` and congestion counts detours *through the forest*, so
    a different backbone means a different ranking of the same candidates.
@@ -17,8 +32,8 @@ The figure spells out each name: **MaxST** is a maximum-weight spanning tree,
 **RandST** a random spanning tree, **SPT** a shortest-path tree, **GLST** a
 greedy low-stretch tree, and **LLST** a local-search low-stretch tree.
 The `fast-` variants use cheaper edge ordering. Minimum-weight spanning trees
-use `mst` (MinST) or `fast-mst` in the API. These constructions return forests
-when the input has multiple connected components.
+use `mst` (MinST) or `fast-mst` in the API. The connected grid below makes
+each spanning forest a single tree.
 
 ![Seven support backbones with full method names and measured stretch](images/grid_backbones.png)
 
@@ -109,7 +124,8 @@ more than edge weight.
 
 ### `glst`
 
-Greedy low-stretch tree. Repeatedly adds the boundary edge maximizing
+Greedy low-stretch forest (the conventional method name is “greedy low-stretch
+tree”). Repeatedly adds the boundary edge maximizing
 
 ```
 (cut / cut_max)^eta / ((projStretch / stretch_max)^alpha)
@@ -170,7 +186,7 @@ Scaffold methods:
 | option | default | meaning |
 |---|---|---|
 | `max_input_edges` | `1000` | Positive integer limiting the full undirected input; explicitly increase it to opt into larger, potentially slow experiments |
-| `init_support` | `"glst"` | Starting tree; choices below |
+| `init_support` | `"glst"` | Starting spanning forest (one tree per component); choices below |
 | `max_passes` | `10` | Maximum accepted improving swaps per component; minimum 1 |
 | `candidate_strategy` | `"random"` | `"random"` or longest current `"tree_distance"` |
 | `candidate_sample_size` | `0` | Add-edge candidates per pass; 0 evaluates all |
