@@ -9,6 +9,7 @@ Run any of these from the repository root.
 | [`03_pytorch_geometric.py`](03_pytorch_geometric.py) | PyG integration end to end, with a trained GCN | torch, torch-geometric |
 | [`04_backbones_and_tuning.py`](04_backbones_and_tuning.py) | Comparing backbone stretch (including LLSF) and tuning the objective | networkx |
 | [`05_local_search_backbone.py`](05_local_search_backbone.py) | LLSF forest refinement and Scaffold growth from that forest | networkx |
+| [`06_variant_animations.py`](06_variant_animations.py) | Five animated methods on one shared RandSF, plus a fixed input and combined 2×3 GIF | matplotlib, Pillow |
 
 ```bash
 python examples/01_grid_demo.py --out docs/images
@@ -17,6 +18,7 @@ python examples/03_pytorch_geometric.py                  # synthetic, offline
 python examples/03_pytorch_geometric.py --dataset Cora   # downloads Planetoid
 python examples/04_backbones_and_tuning.py
 python examples/05_local_search_backbone.py
+python examples/06_variant_animations.py --out docs/images/variants
 ```
 
 For a fast preview, use `python examples/01_grid_demo.py --quick --out demo-preview`.
@@ -103,3 +105,44 @@ all 50 draws, their component counts, and cumulative coverage; the GIF shows
 every early epoch and selected later epochs. It depicts actual sampled
 supports, with the same edge budget in every
 frame. The backbone GIF instead compares completed forests.
+
+## Variant animations
+
+```bash
+python examples/06_variant_animations.py --out docs/images/variants
+# A smaller offline preview:
+python examples/06_variant_animations.py --quick --out demo-preview/variants
+```
+
+The default is the same unweighted 12×12 grid, seed 0, and **one shared RandSF
+backbone (143 edges)**. Every method targets **191/264 edges (72% requested)**.
+The README displays a fixed input and five separate GIFs in a 2×3 table.
+
+| File in `docs/images/variants/` | What changes |
+|---|---|
+| `input.png` | Nothing: the 144-node, 264-edge input stays fixed. |
+| `greedy.gif` | 48 real Greedy rounds, one selected edge each. |
+| `heap.gif` | 48 real Heap rounds, one selected edge each; default max-congestion score, `top_k=16`, one cluster. |
+| `batch.gif` | 12 real Batch rounds; 32 sampled candidates, top 4 insertions, one cluster. |
+| `fast.gif` | One static scoring pass; the actual selected edges are revealed in six groups of eight, ranked by score. These are display steps, not rescoring rounds. |
+| `sample.gif` | 12 actual budgeted draws; `fixed-randsf`, eight scoring forests, draw seeds 0–11. The retained RandSF is identical to the growth panels. |
+| `variants.gif` | Combined animation with fixed input and all five methods. |
+| `variants.png` | Final displayed state of the combined figure. |
+| `variants.json` | Backbone edge IDs, every retained mask, newly highlighted edges, method settings, and playback timing. |
+
+Blue means retained; gray dashes mean omitted; orange highlights the latest
+insertions or edges newly present in a Sample draw. All intermediate supports
+preserve connectivity and all 144 nodes. Sample replaces edges between draws,
+so its panels are separate supports, not an accumulating union. Playback is
+synchronized for presentation and **does not compare runtimes**.
+
+The growth sequences come directly from `return_trace=True` API runs. Greedy
+records insertion order; Heap and Batch also record `addition_round_sizes`.
+Tracing is optional and leaves the selected supports unchanged. Fast's
+`return_scores=True` supplies its one-pass ranking. No algorithm is replaced
+with a visual approximation; only Fast's grouped reveal is a display choice.
+
+Use `--rows`, `--cols`, `--keep-ratio`, `--seed`, and `--workers` to change the
+demo. This script is limited to 1,000 input edges to keep the reference runs
+practical; the chosen budget must exceed the forest size and be below the
+full graph. Install the `[viz,speed]` extras to reproduce the GIFs.

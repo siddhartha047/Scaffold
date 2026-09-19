@@ -112,6 +112,7 @@ overrides win over it.
 | `local_radius` | `1` | invalidation radius, in hops, after an insertion |
 | `dirty_limit` | `64` | cap on invalidations per round; `0` = unlimited |
 | `score_form` | `"max"` | `"max"` or `"product"` — see [algorithms.md](algorithms.md) |
+| `return_trace` | `False` | Record `added_edge_ids` and `addition_round_sizes` in metadata; sizes group all clusters in each insertion round. |
 
 ### `scaffold.batch` extras
 
@@ -121,6 +122,7 @@ overrides win over it.
 | `cluster_method` | `"bfs"` | `"bfs"`, `"metis"` (needs `pymetis`), or `"random"` |
 | `sample_size` | `None` (auto) | Candidates drawn and scored per cluster per round |
 | `add_per_round` | `None` (auto) | Top candidates committed per cluster; must be smaller than `sample_size` |
+| `return_trace` | `False` | Record `added_edge_ids` and `addition_round_sizes` in metadata; sizes group all clusters in each insertion round. |
 
 With both sizes omitted, Batch uses **64/8 below 1,024 input edges** and
 **256/64 otherwise**. If either option is explicit, the other keeps its

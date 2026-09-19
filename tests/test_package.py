@@ -103,11 +103,16 @@ def test_readme_figures_use_existing_repository_files(monkeypatch, default_encod
         r'''<img\b[^>]*\bsrc=["'](docs/images/[^"']+\.(?:png|gif))["']''', text
     ))
     expected = {
-        "docs/images/grid_methods.png",
         "docs/images/grid_backbones.png",
         "docs/images/grid_ratios.gif",
         "docs/images/grid_backbones.gif",
         "docs/images/grid_coverage.gif",
+        "docs/images/variants/input.png",
+        "docs/images/variants/greedy.gif",
+        "docs/images/variants/heap.gif",
+        "docs/images/variants/batch.gif",
+        "docs/images/variants/fast.gif",
+        "docs/images/variants/sample.gif",
     }
     assert targets == expected
     assert all((ROOT / target).is_file() for target in targets)

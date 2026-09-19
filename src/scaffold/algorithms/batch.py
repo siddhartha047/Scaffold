@@ -43,6 +43,7 @@ def run(
     backbone_options=None,
     workers=None,
     verbose: bool = False,
+    return_trace: bool = False,
 ):
     """Grow a support graph with sampled-batch dilation/congestion scoring.
 
@@ -55,6 +56,9 @@ def run(
     parallel path kernel, at the cost of less frequent support updates.
     If either option is explicit, the omitted option keeps its legacy default
     (64 sampled candidates or 8 insertions).
+
+    ``return_trace=True`` records ``added_edge_ids`` and
+    ``addition_round_sizes`` in metadata, grouping all clusters per round.
     """
     automatic = sample_size is None and add_per_round is None
     large_batch = automatic and graph.num_edges >= 1024
@@ -84,6 +88,7 @@ def run(
         seed=seed,
         backbone_options=backbone_options,
     )
+    trace = {"added_edge_ids": [], "addition_round_sizes": []} if return_trace else {}
     if graph.num_edges == 0 or ctx.remaining_budget <= 0:
         return ctx.finish(
             "batch",
@@ -94,6 +99,7 @@ def run(
             add_per_round=add_per_round,
             score_scope="sampled_batch",
             workers=workers,
+            **trace,
         )
 
     node_labels = assign_clusters(graph, clusters, method=cluster_method, seed=seed)
@@ -161,6 +167,9 @@ def run(
         if added == 0:
             break
         scorer.add_edges(chosen)
+        if return_trace:
+            trace["added_edge_ids"].extend(chosen.tolist())
+            trace["addition_round_sizes"].append(int(chosen.size))
         np.add.at(degree, graph.src[chosen], 1)
         np.add.at(degree, graph.dst[chosen], 1)
         if verbose:
@@ -182,6 +191,7 @@ def run(
         score_scope="sampled_batch",
         selection="sampled_topk",
         workers=workers,
+        **trace,
     )
 
 

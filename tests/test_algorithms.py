@@ -54,6 +54,54 @@ def test_greedy_trace_is_empty_when_no_edges_are_added(options):
     assert result.metadata["added_edge_ids"] == []
 
 
+@pytest.mark.parametrize("method", ["heap", "batch"])
+@pytest.mark.parametrize("clusters", [1, 3])
+@pytest.mark.parametrize("weighted", [False, True])
+def test_growth_trace_replays_real_insertion_rounds(method, clusters, weighted):
+    graph = scaffold.grid_graph(4, 4, weight="random" if weighted else None, seed=3)
+    backbone = build_backbone(graph, "RandSF", seed=5)
+    options = dict(backbone=backbone, seed=5, workers=1, clusters=clusters,
+                   add_per_round=2)
+    if method == "batch":
+        options["sample_size"] = 5
+    run = getattr(scaffold, method)
+    traced = run(graph, num_edges=23, return_trace=True, **options)
+    plain = run(graph, num_edges=23, **options)
+    np.testing.assert_array_equal(traced.mask, plain.mask)
+    assert "added_edge_ids" not in plain.metadata
+    assert "addition_round_sizes" not in plain.metadata
+    ids = traced.metadata["added_edge_ids"]
+    sizes = traced.metadata["addition_round_sizes"]
+    assert sum(sizes) == len(ids) == traced.sparse_edges - backbone.sum()
+    assert len(sizes) <= traced.metadata["rounds"]
+    mask, offset = backbone.copy(), 0
+    for size in sizes:
+        assert 0 < size <= 2 * clusters
+        added = ids[offset:offset + size]
+        assert len(set(added)) == size and not mask[added].any()
+        mask[added] = True
+        reference = run(graph, num_edges=int(mask.sum()), **options)
+        np.testing.assert_array_equal(mask, reference.mask)
+        offset += size
+    np.testing.assert_array_equal(mask, traced.mask)
+
+
+@pytest.mark.parametrize("method", ["heap", "batch"])
+@pytest.mark.parametrize("case", ["below_floor", "forest", "empty"])
+def test_growth_trace_has_no_insertions_without_growth(method, case):
+    graph = scaffold.grid_graph(3, 3)
+    if case == "forest":
+        graph = scaffold.grid_graph(1, 5)
+    elif case == "empty":
+        graph = scaffold.normalize_graph(np.empty((2, 0), dtype=np.int64), num_nodes=3)
+    budget = 2 if case == "below_floor" else graph.num_edges
+    result = getattr(scaffold, method)(graph, num_edges=budget, backbone="RandSF",
+                                      seed=5, return_trace=True)
+    assert result.metadata["added_edge_ids"] == []
+    assert result.metadata["addition_round_sizes"] == []
+    assert result.sparse_edges == budget
+
+
 @pytest.mark.parametrize("method", ALL_METHODS)
 @pytest.mark.parametrize("keep_ratio", [0.6, 0.75, 0.9, 1.0])
 def test_budget_is_exact(grid, method, keep_ratio):

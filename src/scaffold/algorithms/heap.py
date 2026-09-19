@@ -59,6 +59,7 @@ def run(
     backbone_options=None,
     workers=None,
     verbose: bool = False,
+    return_trace: bool = False,
 ):
     """Grow the support with a lazy max-heap over candidate scores.
 
@@ -90,6 +91,9 @@ def run(
     score_form:
         ``"max"`` (default, see the module docstring) or ``"product"`` for the
         normalized p-norm objective shared with Greedy and Fast.
+    return_trace:
+        Record ``added_edge_ids`` and ``addition_round_sizes`` in metadata.
+        The sizes group committed edges by insertion round, across clusters.
     """
     ctx = GrowthContext(
         graph,
@@ -177,9 +181,11 @@ def run(
         return out
 
     # Seed every cluster heap.
+    trace = {"added_edge_ids": [], "addition_round_sizes": []} if return_trace else {}
     initial = ctx.candidate_ids()
     if initial.size == 0:
-        return ctx.finish("heap", rounds=0, rescored_candidates=0, heap_rebuilds=0)
+        return ctx.finish("heap", rounds=0, rescored_candidates=0, heap_rebuilds=0,
+                          **trace)
     evaluate(initial)
 
     rounds = 0
@@ -241,6 +247,9 @@ def run(
             unindex(edge_id)
             version.pop(edge_id, None)
 
+        if return_trace:
+            trace["added_edge_ids"].extend(committed)
+            trace["addition_round_sizes"].append(len(committed))
         if verbose:
             print(
                 f"[scaffold.heap] round={rounds} active={len(active)} "
@@ -277,6 +286,7 @@ def run(
         clusters=int(cluster_ids.size),
         score_form=score_form,
         workers=workers,
+        **trace,
     )
 
 
