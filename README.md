@@ -126,6 +126,29 @@ and node congestion; zero disables a term. [Algorithm guide](docs/algorithms.md)
 
 </details>
 
+### Watch each method
+
+All five use the **same seeded RandSF backbone** and a **191-edge budget**.
+Greedy, Heap, and Batch show real insertion rounds. Fast reveals its one-pass
+selection in groups; Sample draws different supports at the same budget.
+Orange marks new edges. Animation timing is illustrative.
+
+<table>
+  <tr>
+    <td><a href="docs/images/variants/input.png"><img src="docs/images/variants/input.png" width="280" alt="Fixed input graph: 144 nodes and 264 edges"></a></td>
+    <td><a href="docs/images/variants/greedy.gif"><img src="docs/images/variants/greedy.gif" width="280" alt="Scaffold-Greedy grows from RandSF one best edge at a time"></a></td>
+    <td><a href="docs/images/variants/heap.gif"><img src="docs/images/variants/heap.gif" width="280" alt="Scaffold-Heap grows from the same RandSF while refreshing cached scores"></a></td>
+  </tr>
+  <tr>
+    <td><a href="docs/images/variants/batch.gif"><img src="docs/images/variants/batch.gif" width="280" alt="Scaffold-Batch adds the top four edges from each sampled batch"></a></td>
+    <td><a href="docs/images/variants/fast.gif"><img src="docs/images/variants/fast.gif" width="280" alt="Scaffold-Fast scores once and reveals its selected edges in groups"></a></td>
+    <td><a href="docs/images/variants/sample.gif"><img src="docs/images/variants/sample.gif" width="280" alt="Scaffold-Sample draws different 191-edge supports around the fixed RandSF"></a></td>
+  </tr>
+</table>
+
+[Combined GIF](docs/images/variants/variants.gif) ·
+[Reproduce these animations](examples/README.md#variant-animations).
+
 ## Use with your existing code
 
 Scaffold accepts **NetworkX graphs, SciPy sparse matrices, NumPy/Torch edge
@@ -221,29 +244,6 @@ backbones can be passed as masks or registered with `scaffold.register_backbone`
 
 Unweighted **12×12 grid: 144 nodes, 264 edges**, seed 0. These connected-grid
 examples use RandSF for the method and sampling comparisons.
-
-### Watch each method
-
-All five use the **same seeded RandSF backbone** and a **191-edge budget**.
-Greedy, Heap, and Batch show real insertion rounds. Fast reveals its one-pass
-selection in groups; Sample draws different supports at the same budget.
-Orange marks new edges. Animation timing is illustrative.
-
-<table>
-  <tr>
-    <td><a href="docs/images/variants/input.png"><img src="docs/images/variants/input.png" width="280" alt="Fixed input graph: 144 nodes and 264 edges"></a></td>
-    <td><a href="docs/images/variants/greedy.gif"><img src="docs/images/variants/greedy.gif" width="280" alt="Scaffold-Greedy grows from RandSF one best edge at a time"></a></td>
-    <td><a href="docs/images/variants/heap.gif"><img src="docs/images/variants/heap.gif" width="280" alt="Scaffold-Heap grows from the same RandSF while refreshing cached scores"></a></td>
-  </tr>
-  <tr>
-    <td><a href="docs/images/variants/batch.gif"><img src="docs/images/variants/batch.gif" width="280" alt="Scaffold-Batch adds the top four edges from each sampled batch"></a></td>
-    <td><a href="docs/images/variants/fast.gif"><img src="docs/images/variants/fast.gif" width="280" alt="Scaffold-Fast scores once and reveals its selected edges in groups"></a></td>
-    <td><a href="docs/images/variants/sample.gif"><img src="docs/images/variants/sample.gif" width="280" alt="Scaffold-Sample draws different 191-edge supports around the fixed RandSF"></a></td>
-  </tr>
-</table>
-
-[Combined GIF](docs/images/variants/variants.gif) ·
-[Reproduce these animations](examples/README.md#variant-animations).
 
 ### Resample a sparse view each epoch
 
