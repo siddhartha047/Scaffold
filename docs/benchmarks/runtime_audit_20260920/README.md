@@ -1,5 +1,10 @@
 # Runtime audit, 2026-09-20
 
+For a separate breakdown of **forest construction versus Scaffold work**,
+see [split.md](split.md) and the raw `split.json` records. That diagnostic
+synchronizes Sample's forest/scoring phases; the original normal-API records
+and tables below remain unchanged.
+
 This audit replaces the paper's mixed-scope construction times with one
 definition: **a bidirectional NumPy edge list in memory to a materialized,
 bidirectional sparse edge list**. The wall-clock timer surrounds the public API

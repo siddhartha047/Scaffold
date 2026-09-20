@@ -137,6 +137,11 @@ main and appendix tables are generated from the same observations.
 
 ## Why Fast can finish quickly
 
+For all five methods, a separate [forest/Scaffold breakdown](benchmarks/runtime_audit_20260920/split.md)
+records disjoint forest, scoring/selection, and input/output phases. Sample's
+phases are synchronized only for that diagnostic; the normal API totals above
+remain unchanged.
+
 Fast builds one forest, computes all initial dilation/congestion scores using
 LCA and root-prefix operations, then selects the top edges. It does not run a
 separate shortest-path search for each omitted edge. On unweighted inputs,
