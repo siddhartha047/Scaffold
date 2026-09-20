@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Runtime tables now use matched 20% retention and complete input-to-output
+  timings, including a fresh forest and Sample's first draw. Reproducible
+  benchmark scripts and all repetitions accompany the updated measurements;
+  older timings and planning estimates remain in an explicitly marked archive.
 - Shorter README with one runtime table, explicit Fast + Fast-RandSF starting
   examples, framework integration instructions, compact backbone descriptions,
   and smaller resampling GIF display. Detailed guidance remains in `docs/`.

@@ -57,33 +57,32 @@ remain, but components may split. Check `result.metadata["delta_min"]`.
 
 ## Runtime expectations
 
-**20% edge retention · 8 CPU workers · synthetic unweighted graphs.**
-Edge counts below are unique undirected edges.
+**20% edge retention · 8 CPU workers · unweighted synthetic graphs.**
+Counts are unique undirected edges; graph sizes differ across rows.
 
-| Method / setting | Nodes | Edges | Measured time |
+| Method | Nodes | Edges | Complete time (s) |
 |---|---:|---:|---:|
-| Greedy | 400 | 3,131 | **0.75 s** |
-| Heap, product score | 4,000 | 39,893 | **28.65 s** |
-| Batch, 512 candidates / 64 insertions per cluster | 10,000 | 250,000 | **32.64 s** |
-| Batch, 512 / 256 per cluster | 10,000 | 100,000 | **1.58 s** |
-| Batch, 512 / 256 per cluster | 200,000 | 2,399,834 | **3,444.83 s (57.4 min)** |
-| **Fast** | **200,000** | **2,399,834** | **0.73 s** |
-| Sample, 8 scoring backbones | 200,000 | 2,399,834 | **5.01 s** preprocessing |
-| Sample, cached draw | 200,000 | 2,399,834 | **0.048 s** per draw |
+| Greedy | 400 | 3,131 | **0.78** |
+| Heap | 4,000 | 39,893 | **25.16** |
+| Batch | 10,000 | 250,000 | **31.01** |
+| Fast | 200,000 | 2,399,834 | **2.30** |
+| Sample, 8 random scoring forests + first draw | 200,000 | 2,399,834 | **9.02** |
 
-Measured on a shared AMD EPYC 7282 host with warmed Numba kernels. Construction
-timings include the backbone and output assembly. All timings exclude input
-loading, normalization, JIT startup, and GNN training. Values are medians except the
-large Batch case (one completed run); Batch uses ten candidate clusters.
-The construction benchmarks used **Fast-MaxSF**; Sample used fixed MaxSF
-with eight randomized scoring forests. These recorded settings differ from
-the recommended Fast-RandSF example above.
+Medians of three fresh constructions on a shared dual AMD EPYC 7282 host.
+The timer includes **input normalization, a new spanning forest, scoring,
+selection, and bidirectional sparse-output assembly**. Sample includes
+preprocessing and its **first draw**. Kernels are warm; graph loading, JIT
+startup, GNN training, and GPU transfer are excluded.
 
-Use **Fast for one support** and **Sample for repeated draws** at large scale.
-Batch repeatedly searches the evolving support, so its cost can be much
-higher. Different graph sizes are shown; these are not same-input speed
-comparisons. [Full settings, raw measurements, memory guidance, and 1M-node
-planning estimates](docs/performance.md).
+Batch uses **512 candidates / 64 insertions per cluster**, ten BFS clusters.
+The benchmarks use Fast-MaxSF; Sample uses fixed MaxSF plus eight randomized
+scoring forests. These settings differ from the recommended Fast-RandSF
+quick start. Every result satisfies the exact budget and connectivity checks.
+
+After Sample preprocessing, later **cached draws take 0.055 s** (median of
+nine), including output assembly. Use Fast for one support and Sample for
+repeated draws. Dynamic Batch can cost much more on larger inputs.
+[Full audited settings, worker scaling, stage timings, and raw records](docs/performance.md).
 
 ## Choose an algorithm
 
