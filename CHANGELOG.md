@@ -37,6 +37,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Separate forest/Scaffold runtime diagnostic with fresh output validation;
+  Sample's parallel forest builds are synchronized before scoring to avoid
+  double-counting overlapping wall time. Normal API timings remain available.
 - `feature_edge_weights` and `with_feature_weights`: research-compatible cosine,
   Euclidean-affinity, dot, and uniform weights, raw-distance options, sparse
   features, and optional scikit-learn distances via the `metrics` extra. Only
