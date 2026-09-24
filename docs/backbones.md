@@ -79,7 +79,8 @@ choices. `available_backbones(notation="forest")` lists the preferred SF names;
 `available_backbones()` retains the historical list for existing callers.
 `SF`, `MaxSF`, `LLSF`, and compact `FastMaxSF`/`FastRandSF` spellings also work.
 SLSF, RandSPF,
-GLSF, and LLSF require `pip install "scaffold-sparse[networkx]"`; all other
+GLSF, and LLSF require NetworkX: run `python -m pip install ".[networkx]"`
+from the repository root. All other
 built-in backbones and the default Sample modes work without NetworkX.
 
 ## Visual comparison
@@ -254,7 +255,8 @@ with a suggestion to use `randsf`, `fast-randsf`, or `fast-maxsf`. The limit
 counts unique undirected edges after graph normalization, not the requested
 output budget or the largest component. It applies to sampled LLSF too.
 
-Install `scaffold-sparse[networkx]` to use LLSF. It works with Greedy, Heap,
+Install the `networkx` extra from the repository root to use LLSF:
+`python -m pip install ".[networkx]"`. It works with Greedy, Heap,
 Batch and Fast and with every graph format accepted by those methods:
 
 ```python

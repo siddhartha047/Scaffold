@@ -15,18 +15,45 @@ full graph; orange marks each new edge.
 
 ## Installation
 
-Install from GitHub; SSH access is required while the repository is private:
+Download or clone this repository, then run from the folder containing
+`pyproject.toml`. The same command works with the anonymous review copy and
+the public GitHub copy:
 
 ```bash
-pip install "scaffold-sparse[speed] @ git+ssh://git@github.com/siddhartha047/Scaffold.git"
+python -m pip install ".[speed]"
 ```
 
-Python **3.9+**. The package is installed as `scaffold-sparse` and imported as
-`scaffold`. Core dependencies are NumPy and SciPy; `[speed]` adds Numba and is
-recommended for medium/large graphs. Add `networkx`, `pyg`, or `viz` to the
-extras as needed, for example `[speed,pyg]`; `[metrics]` adds scikit-learn
-distances. After the public PyPI release,
-use `pip install "scaffold-sparse[speed]"`.
+Python **3.9+**. `python -m pip install .` installs only NumPy and SciPy;
+`[speed]` adds Numba and is recommended for medium/large graphs. Optional
+extras are `networkx`, `pyg`, `viz`, and `metrics` (scikit-learn distances),
+for example `python -m pip install ".[speed,pyg]"`.
+
+The distribution is **`scaffold-sparsifier`**; the Python import is always
+**`import scaffold`**. This repository provides the sparsification library;
+**Scaffold-GNN** provides the GNN experiments, settings, and comparison methods
+and is installed separately from its own repository.
+
+<details>
+<summary>Public GitHub installation and planned PyPI release</summary>
+
+For installation directly from public GitHub, replace `OWNER` with the owner
+shown in the repository URL:
+
+```bash
+python -m pip install "scaffold-sparsifier[speed] @ git+https://github.com/OWNER/Scaffold.git"
+```
+
+**After review and the PyPI release**, installation will be:
+
+```bash
+python -m pip install scaffold-sparsifier
+# With Numba acceleration:
+python -m pip install "scaffold-sparsifier[speed]"
+```
+
+Use the source installation above until that release.
+
+</details>
 
 ## Quick start
 
@@ -295,7 +322,7 @@ retained and gray dashes are omitted.
 Reproduce from a checkout:
 
 ```bash
-pip install -e ".[viz,speed]"
+python -m pip install -e ".[viz,speed]"
 python examples/01_grid_demo.py --out docs/images
 python examples/06_variant_animations.py --out docs/images/variants
 # Script 01 accepts --only coverage / --only backbones; both accept --quick.

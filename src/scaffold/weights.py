@@ -147,7 +147,10 @@ def feature_edge_weights(
         try:
             from sklearn.metrics import DistanceMetric
         except ImportError as exc:
-            raise ImportError("This distance requires scikit-learn; install scaffold-sparse[metrics].") from exc
+            raise ImportError(
+                "This distance requires scikit-learn; "
+                "install it with python -m pip install scikit-learn."
+            ) from exc
         backend = DistanceMetric.get_metric(name, **params)
 
     # Roughly 32 MiB per gathered endpoint block (at least one feature row).

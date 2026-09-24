@@ -4,7 +4,7 @@
 import scaffold
 ```
 
-The distribution is `scaffold-sparse`; the canonical import name is `scaffold`.
+The distribution is `scaffold-sparsifier`; the canonical import name is `scaffold`.
 `import scaffold_sparse` works too and exposes the same API.
 
 ---

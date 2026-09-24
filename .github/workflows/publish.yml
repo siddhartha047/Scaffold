@@ -1,8 +1,8 @@
 name: publish
 
-# Fires only on a version tag. Until the repository is public and a PyPI
-# Trusted Publisher is configured (see RELEASING.md), this workflow is inert:
-# no tag, no run.
+# Release workflow for use after review: a version tag publishes to PyPI;
+# a manual dispatch selects TestPyPI or PyPI. Ordinary branch pushes do not publish.
+# Configure the corresponding Trusted Publisher first; see RELEASING.md.
 on:
   push:
     tags: ["v*"]

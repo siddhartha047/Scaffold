@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Distribution renamed from `scaffold-sparse` to `scaffold-sparsifier`.
+  The canonical `import scaffold` and both legacy import aliases are unchanged.
+  Installation guides now use the repository source for anonymous review and
+  public GitHub, with PyPI distribution planned after review.
+
 - Runtime tables now use matched 20% retention and complete input-to-output
   timings, including a fresh forest and Sample's first draw. Reproducible
   benchmark scripts and all repetitions accompany the updated measurements;

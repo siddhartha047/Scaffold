@@ -1,6 +1,8 @@
 """Use the research LLSF as a standalone forest or a SCAFFOLD backbone.
 
-Run after installing scaffold-sparse[networkx]::
+From the repository root, install the NetworkX extra and run::
+
+    python -m pip install ".[networkx]"
 
     python examples/05_local_search_backbone.py
 

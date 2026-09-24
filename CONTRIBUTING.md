@@ -2,11 +2,11 @@
 
 ## Setup
 
+Download or clone the repository, then run from its root:
+
 ```bash
-git clone git@github.com:siddhartha047/Scaffold.git
-cd Scaffold
-pip install -e ".[dev]"
-pytest
+python -m pip install -e ".[dev]"
+python -m pytest
 ```
 
 ## Layout

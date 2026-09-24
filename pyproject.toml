@@ -6,7 +6,7 @@ requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "scaffold-sparse"
+name = "scaffold-sparsifier"
 version = "0.1.0"
 description = "SCAFFOLD: dilation- and congestion-aware graph sparsification for GNNs"
 readme = "README.md"

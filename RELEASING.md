@@ -1,206 +1,82 @@
-# Releasing
+# Distribution and releases
 
-Two phases, deliberately. **Phase 1 keeps the package private** while you test
-it; **Phase 2** opens it to the public. Nothing in the code changes between
-them — only where it is installed from.
+One source serves both the ICLR 2027 review copy on anonymous.4open.science
+and the public GitHub repository linked from arXiv. Installation does not
+require separate branches or an anonymous export script.
 
----
-
-## Phase 1 — private (now)
-
-While `siddhartha047/Scaffold` is a private GitHub repository, pip can install
-straight from it. No package index is involved, so nothing is published
-anywhere, and only people with repo access can install it.
-
-Plain `pip install scaffold-sparse` is intentionally **not available during
-this phase**: that command asks the configured package index, and PyPI is
-public. While testing privately, use the Git URL or a wheel below. The plain
-command becomes available only after the public PyPI release (or after setting
-up a separate authenticated private Python package index).
-
-### For yourself
-
-```bash
-git clone git@github.com:siddhartha047/Scaffold.git
-cd Scaffold
-pip install -e ".[dev]"
-pytest
-```
-
-### For a collaborator you have added to the repo
-
-Over SSH (they need an SSH key on their GitHub account):
-
-```bash
-pip install "git+ssh://git@github.com/siddhartha047/Scaffold.git"
-
-# a specific commit, which is what you want during private testing
-pip install "git+ssh://git@github.com/siddhartha047/Scaffold.git@<commit-sha>"
-
-# with extras
-pip install "scaffold-sparse[pyg] @ git+ssh://git@github.com/siddhartha047/Scaffold.git"
-```
-
-Over HTTPS with a personal access token (repo scope), for CI or machines
-without SSH keys:
-
-```bash
-pip install "git+https://${GITHUB_TOKEN}@github.com/siddhartha047/Scaffold.git"
-```
-
-In a `requirements.txt`:
-
-```
-scaffold-sparse @ git+ssh://git@github.com/siddhartha047/Scaffold.git@<commit-sha>
-```
-
-### Distributing a built wheel
-
-If a collaborator has no repo access, hand them a wheel directly:
-
-```bash
-python -m build            # -> dist/scaffold_sparse-0.1.0-py3-none-any.whl
-pip install dist/scaffold_sparse-0.1.0-py3-none-any.whl
-```
-
-### What *not* to do while private
-
-- **Do not upload to PyPI** — that is irreversible and public.
-- **Do not upload to TestPyPI either.** TestPyPI is publicly browsable. It is
-  the right rehearsal step, but only once you are ready to be seen.
-
----
-
-## Verifying a release candidate
-
-Before either phase, in a clean environment:
-
-```bash
-# 1. tests pass, including the tree-kernel equivalence checks
-pytest
-
-# 2. the examples run
-python examples/01_grid_demo.py --out /tmp/scaffold-figures
-python examples/02_standalone.py
-python examples/03_pytorch_geometric.py
-python examples/04_backbones_and_tuning.py
-
-# optional but recommended when the sibling research checkout is available
-python validation/compare_research.py
-
-# 3. it builds
-rm -rf dist/ build/ src/*.egg-info
-python -m build
-
-# 4. the metadata is valid
-python -m twine check dist/*
-
-# 5. install wheel and source archive in separate, clean environments
-# Works on Windows, macOS, and Linux; exercises all methods with core deps.
-python validation/check_distributions.py --dist dist --sdist
-```
-
-Step 5 matters more than it looks: it is the only check that the *packaged*
-files are complete. A missing `package-data` entry or a stray import of a dev-only
-module shows up here and nowhere else.
-
----
-
-## Phase 2 — public
-
-### Before flipping the switch
-
-- [ ] Tests pass on every supported Python version (see `.github/workflows/test.yml`)
-- [ ] `CHANGELOG.md` has a dated entry for the version
-- [ ] The version in `src/scaffold/_version.py` matches the tag you are about to push
-- [ ] `README.md` figures are regenerated and committed
-- [ ] The name `scaffold-sparse` is still free on PyPI
-- [ ] Repo visibility changed to public
-- [ ] A citation entry is in `README.md` if the paper is out
-
-### 2a. TestPyPI first
-
-```bash
-rm -rf dist/
-python -m build
-python -m twine upload --repository testpypi dist/*
-```
-
-Then install from it in a clean venv. `--extra-index-url` is required because
-NumPy and SciPy are not mirrored on TestPyPI:
-
-```bash
-pip install --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple/ \
-            scaffold-sparse
-```
-
-### 2b. PyPI
-
-```bash
-python -m twine upload dist/*
-```
-
-Then:
-
-```bash
-pip install scaffold-sparse
-```
-
-### 2c. Tag it
-
-```bash
-git tag -a v0.1.0 -m "scaffold-sparse 0.1.0"
-git push origin v0.1.0
-```
-
----
-
-## Automating it later
-
-`.github/workflows/publish.yml` publishes on a pushed tag. It is written for
-**PyPI Trusted Publishing**, which avoids storing a long-lived API token as a
-repository secret: PyPI verifies the GitHub Actions workflow identity directly.
-
-To enable it, on PyPI go to your project → *Publishing* → *Add a new publisher*:
-
-| field | value |
+| Channel | Installation |
 |---|---|
-| Owner | `siddhartha047` |
-| Repository | `Scaffold` |
-| Workflow name | `publish.yml` |
-| Environment name | `pypi` |
+| Anonymous review copy | Download the source, then `python -m pip install .` |
+| Public GitHub | Install from the downloaded source or a Git URL |
+| PyPI, planned after review | `python -m pip install scaffold-sparsifier` |
 
-The workflow is otherwise inert — it only triggers on `v*` tags.
+The distribution name is **`scaffold-sparsifier`**; the Python import is
+**`import scaffold`** in every channel. The existing `scaffold_sparse` and
+`scaffold_sparsify` imports remain compatibility aliases. Scaffold-GNN is a
+separate repository with its own installation and experiment runner.
 
----
+## Installing from source or Git
 
-## Versioning
+From the repository root:
 
-`MAJOR.MINOR.PATCH`, bumped in `src/scaffold/_version.py` and recorded in
-`CHANGELOG.md`. Both `pyproject.toml` and `_version.py` carry the number; keep
-them in sync (there is a test for this in `tests/test_package.py`).
+```bash
+python -m pip install ".[speed]"
+```
 
-- **PATCH** — bug fixes, no API change
-- **MINOR** — new features, backwards compatible
-- **MAJOR** — breaking changes
+For development, use `python -m pip install -e ".[dev]"`.
+For public GitHub, replace `OWNER` with the repository owner:
 
-Planned:
+```bash
+python -m pip install "scaffold-sparsifier[speed] @ git+https://github.com/OWNER/Scaffold.git"
+```
 
-| version | contents |
-|---|---|
-| `0.1.0` | The four algorithms, all adapters, PyG integration, docs |
-| `0.2.0` | Parallel `fast`; artifact caching helpers; benchmark suite |
-| `0.3.0` | Out-of-core path for graphs that do not fit in RAM |
-| `1.0.0` | Stable public API |
+Append `@COMMIT` to the Git URL to install a specific revision. Source
+installation remains the review workflow; no PyPI release is needed for it.
+Mirror anonymization is configured separately from Python installation;
+include package metadata and documentation in that review, and preserve
+required license attribution.
 
-## About the name
+## Checking a release candidate
 
-`scaffold` on PyPI is taken by an unrelated project, so the distribution is
-`scaffold-sparse` while the canonical import name stays `scaffold`.
-`import scaffold_sparse` also works for anyone who expects the import to match
-the distribution. The earlier private-development alias
-`import scaffold_sparsify` remains compatible but is not the documented API.
+From a development environment, build into a fresh output directory so old
+artifacts cannot be mistaken for the release:
 
-If you ever want the bare name, PyPI has a formal process for abandoned
-projects under PEP 541 — but do not build a release schedule around it.
+```bash
+python -m pytest
+python -m build --outdir dist/release-candidate
+python -m twine check dist/release-candidate/*
+python validation/check_distributions.py --dist dist/release-candidate --sdist
+```
+
+The last command installs both the wheel and source archive in clean virtual
+environments, checks the distribution metadata and legacy imports, and runs
+all five algorithms with only the core dependencies. Use an empty output
+directory for each release candidate.
+
+## Publishing after review
+
+Before publishing, verify that the `scaffold-sparsifier` project name is
+available or owned by the release account. Keep the version in
+`pyproject.toml` and `src/scaffold/_version.py` synchronized and record the
+release in `CHANGELOG.md`.
+
+The existing `.github/workflows/publish.yml` supports:
+
+- Manual dispatch to TestPyPI or PyPI.
+- A pushed `v*` version tag to PyPI.
+
+Configure a Trusted Publisher for the repository, `publish.yml`, and the
+appropriate `testpypi` or `pypi` environment before using that workflow.
+Ordinary commits and branch pushes do not publish packages.
+
+Once the PyPI release is available:
+
+```bash
+python -m pip install scaffold-sparsifier
+# Recommended for medium/large graphs:
+python -m pip install "scaffold-sparsifier[speed]"
+```
+
+```python
+import scaffold
+```

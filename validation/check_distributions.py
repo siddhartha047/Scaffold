@@ -21,6 +21,7 @@ from pathlib import Path
 
 SMOKE = """
 import importlib
+import importlib.metadata
 import math
 import sys
 from pathlib import Path
@@ -30,6 +31,7 @@ import numpy as np
 
 package = Path(scaffold.__file__).resolve()
 assert Path(sys.prefix).resolve() in package.parents, package
+assert importlib.metadata.version('scaffold-sparsifier') == scaffold.__version__
 for name in ('networkx', 'matplotlib', 'torch', 'torch_geometric', 'numba', 'sklearn'):
     assert name not in sys.modules, name
 for alias in ('scaffold_sparse', 'scaffold_sparsify'):
