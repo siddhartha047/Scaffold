@@ -20,7 +20,7 @@ try:
     import networkx as nx
 except ImportError as exc:  # pragma: no cover - exercised without the extra
     raise ImportError(
-        "SLSF and RandSPF require NetworkX; install scaffold-sparse[networkx]."
+        "SLSF and RandSPF require NetworkX; install it with python -m pip install networkx."
     ) from exc
 
 from ._llst import _RandomShortestPathTree

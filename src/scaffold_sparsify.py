@@ -1,14 +1,13 @@
 """Legacy import alias for the :mod:`scaffold` package.
 
-The distribution was called ``scaffold-sparsify`` during private development.
-It is now ``scaffold-sparse``; this module remains as a harmless compatibility
-alias for early testers::
+The distribution is named ``scaffold-sparsifier``. This module remains a
+compatibility alias for existing code::
 
     import scaffold_sparsify as scaffold
 
     result = scaffold.fast(G, keep_ratio=0.2)
 
-New code should use ``import scaffold`` (canonical) or ``import scaffold_sparse``.
+New code should use ``import scaffold``.
 """
 
 import scaffold as _scaffold

@@ -5,7 +5,8 @@ Run::
     python examples/03_pytorch_geometric.py                 # synthetic graph
     python examples/03_pytorch_geometric.py --dataset Cora  # downloads Planetoid
 
-Requires ``pip install "scaffold-sparse[pyg]"``. With no ``--dataset`` it
+Install with ``python -m pip install ".[pyg]"`` from the repository root.
+With no ``--dataset`` it
 builds a synthetic graph so the script runs anywhere, offline.
 
 Covers:

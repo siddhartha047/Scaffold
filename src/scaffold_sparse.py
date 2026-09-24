@@ -1,12 +1,10 @@
 """Import alias for the :mod:`scaffold` package.
 
-The distribution is named ``scaffold-sparse`` because ``scaffold`` is already
-taken on PyPI. The canonical import remains the short, paper-facing name::
+The distribution is named ``scaffold-sparsifier``. The canonical import is::
 
     import scaffold
 
-This alias is available for users who prefer the import to resemble the
-distribution name::
+This alias remains available for existing code::
 
     import scaffold_sparse as scaffold
 

@@ -72,7 +72,7 @@ def test_callable_distance_and_missing_optional_dependency(example, monkeypatch)
     expected = scaffold.feature_edge_weights(graph, features, "euclidean")
     actual = scaffold.feature_edge_weights(graph, features, lambda a, b: np.linalg.norm(a - b))
     np.testing.assert_allclose(actual, expected)
-    with pytest.raises(ImportError, match=r"scaffold-sparse\[metrics\]"):
+    with pytest.raises(ImportError, match="python -m pip install scikit-learn"):
         scaffold.feature_edge_weights(graph, features, "minkowski")
 
 

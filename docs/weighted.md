@@ -77,9 +77,8 @@ returns a `Graph` carrying that array.
 
 ### Additional scikit-learn distances
 
-Install the `metrics` extra alongside any existing extras (e.g.
-`scaffold-sparse[speed,metrics]`; use the repository install URL until the PyPI
-release). Named metrics use scikit-learn's
+From the repository root, install the `metrics` extra with
+`python -m pip install ".[speed,metrics]"`. Named metrics use scikit-learn's
 [DistanceMetric API](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.DistanceMetric.html):
 
 ```python

@@ -19,7 +19,7 @@ try:
     import networkx as nx
 except ImportError as exc:  # pragma: no cover - exercised without the extra
     raise ImportError(
-        "The LLSF (legacy LLST) backbone requires NetworkX; install scaffold-sparse[networkx]."
+        "The LLSF (legacy LLST) backbone requires NetworkX; install it with python -m pip install networkx."
     ) from exc
 
 from .backbone import DEFAULT_BUCKETS, build_backbone, canonical_backbone_name

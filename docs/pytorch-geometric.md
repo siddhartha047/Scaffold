@@ -1,7 +1,9 @@
 # PyTorch Geometric integration
 
+From the repository root:
+
 ```bash
-pip install "scaffold-sparse[pyg]"
+python -m pip install ".[speed,pyg]"
 ```
 
 Everything here lives in `scaffold.pyg`, which is imported lazily — plain
@@ -208,7 +210,7 @@ on any mismatch — weights are indexed positionally, so a silent mismatch would
 corrupt every draw.
 
 **Install numba.** Without it the union-find, LCA and prefix-sum kernels run as
-pure Python loops. `pip install "scaffold-sparse[speed]"`.
+pure Python loops. `python -m pip install ".[speed]"` from the repository root.
 
 **Lower `tree_count`.** The precompute is linear in it. `tree_count=4` is a
 reasonable large-graph setting; `1` gives frequency-free weights driven purely

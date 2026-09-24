@@ -4,7 +4,7 @@ The package includes a real-data comparison against the implementation used by
 `ICML_SPARSIFICATION/main.py`:
 
 ```bash
-pip install -e ".[dev,pyg]"
+python -m pip install -e ".[dev,pyg]"
 python validation/compare_research.py
 ```
 

@@ -1,7 +1,7 @@
 """PyTorch Geometric integration.
 
 Requires ``torch`` and ``torch-geometric``
-(``pip install "scaffold-sparse[pyg]"``). Imported lazily by
+(``python -m pip install ".[pyg]"`` from the repository root). Imported lazily by
 ``scaffold.pyg``, so plain SciPy/NetworkX users never pay for it.
 
 Two things live here:

@@ -170,7 +170,7 @@ def main():
 
     if not HAVE_NUMBA:
         print("Note: numba is not installed, so the kernels are running as pure")
-        print("Python loops. Install it (pip install \"scaffold-sparse[speed]\")")
+        print("Python loops. Install it (python -m pip install numba)")
         print("for representative timings on anything but toy graphs.")
 
 
