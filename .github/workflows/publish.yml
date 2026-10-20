@@ -1,8 +1,8 @@
 name: publish
 
-# Release workflow for use with this source distribution: a version tag publishes to PyPI;
+# A version tag publishes to PyPI;
 # a manual dispatch selects TestPyPI or PyPI. Ordinary branch pushes do not publish.
-# Configure the corresponding Trusted Publisher first; see RELEASING.md.
+# Configure the corresponding Trusted Publisher first.
 on:
   push:
     tags: ["v*"]

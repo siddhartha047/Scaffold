@@ -21,6 +21,9 @@ JIT caches allowed; it is not presented as an empty-cache compilation test.
 
 ## Files and reproducibility
 
+Machine names and Git commit identifiers use anonymous labels. The per-file
+SHA-256 manifests retain the exact algorithm-source checks for reproduction.
+
 - `variants.json`: all repetitions at 1, 4, and 8 workers; Sample phase times
   and cached draws; graph hashes, exact budgets, settings, and source hashes.
 - `profiles.json`: independent instrumented Fast calls plus normalized-input

@@ -15,7 +15,6 @@ import gc
 import hashlib
 import json
 import os
-import platform
 import signal
 import subprocess
 import sys
@@ -101,10 +100,9 @@ class Audit:
         self.hashes = {}
         self.report = dict(
             status="running", started_utc=datetime.now(timezone.utc).isoformat(),
-            section=args.section, package_commit=subprocess.check_output(
-                ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+            section=args.section, package_commit="anonymous-source-snapshot",
             python=sys.version, numpy=np.__version__, numba=numba.__version__,
-            hostname=platform.node(), cpu_info=subprocess.check_output(["lscpu"], text=True),
+            hostname="benchmark-host", cpu_info=subprocess.check_output(["lscpu"], text=True),
             affinity=sorted(os.sched_getaffinity(0)), load_average_start=os.getloadavg(),
             environment={key: os.environ.get(key) for key in (
                 "OMP_PROC_BIND", "OMP_NUM_THREADS", "NUMBA_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")},
