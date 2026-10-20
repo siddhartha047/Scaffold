@@ -13,7 +13,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
-authors = [{ name = "Anonymous Contributors", email = "anonymous@example.invalid" }]
+authors = [{ name = "Anonymous Contributors" }]
 keywords = [
     "graph",
     "graph-sparsification",
@@ -67,8 +67,7 @@ dev = [
 [project.urls]
 Homepage = "https://anonymous.4open.science/r/Scaffold-B6DB/"
 Repository = "https://anonymous.4open.science/r/Scaffold-B6DB/"
-Issues = "https://anonymous.4open.science/r/Scaffold-B6DB//issues"
-Changelog = "https://anonymous.4open.science/r/Scaffold-B6DB//blob/main/CHANGELOG.md"
+Changelog = "https://anonymous.4open.science/r/Scaffold-B6DB/CHANGELOG.md"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
